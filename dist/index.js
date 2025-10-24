@@ -35,6 +35,24 @@ function p5_mouse_released(p) {
         start: state.draggedLineStart,
         end: p.createVector(p.mouseX, p.mouseY)
     };
+    // As a debugging aid, if SHIFT is held, snap lines to horizontal or vertical if they are close enough
+    if (p.keyIsDown(p.SHIFT)) {
+        var rawLine = lineContainingSegment(newSegment);
+        if (Math.abs(rawLine.m) > 50) {
+            var sign = newSegment.end.y > newSegment.start.y ? 1 : -1;
+            newSegment.end = {
+                x: newSegment.start.x,
+                y: newSegment.start.y + sign * segmentLength(newSegment)
+            };
+        }
+        if (Math.abs(rawLine.m) < 1 / 50) {
+            var sign = newSegment.end.x > newSegment.start.x ? 1 : -1;
+            newSegment.end = {
+                x: newSegment.start.x + sign * segmentLength(newSegment),
+                y: newSegment.start.y
+            };
+        }
+    }
     // Check for intersections with existing line segments
     var newIntersections = [];
     for (var iSegment = 0; iSegment < state.segments.length; iSegment++) {
@@ -122,4 +140,8 @@ function lineIntersection(line1, line2) {
     var x = (line2.c - line1.c) / (line1.m - line2.m);
     var y = line1.m * x + line1.c;
     return { x: x, y: y };
+}
+function segmentLength(segment) {
+    var sq = Math.pow(segment.end.x - segment.start.x, 2) + Math.pow(segment.end.y - segment.start.y, 2);
+    return Math.sqrt(sq);
 }

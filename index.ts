@@ -72,6 +72,25 @@ function p5_mouse_released(p: p5) {
         end: p.createVector(p.mouseX, p.mouseY)
     };
 
+    // As a debugging aid, if SHIFT is held, snap lines to horizontal or vertical if they are close enough
+    if (p.keyIsDown(p.SHIFT)) {
+        const rawLine = lineContainingSegment(newSegment);
+        if (Math.abs(rawLine.m) > 50) {
+            const sign = newSegment.end.y > newSegment.start.y ? 1 : -1;
+            newSegment.end = {
+                x: newSegment.start.x,
+                y: newSegment.start.y + sign * segmentLength(newSegment)
+            };
+        }
+        if (Math.abs(rawLine.m) < 1 / 50) {
+            const sign = newSegment.end.x > newSegment.start.x ? 1 : -1;
+            newSegment.end = {
+                x: newSegment.start.x + sign * segmentLength(newSegment),
+                y: newSegment.start.y
+            };
+        }
+    }
+
     // Check for intersections with existing line segments
     const newIntersections: Intersection[] = [];
     for (let iSegment = 0; iSegment < state.segments.length; iSegment++) {
@@ -173,3 +192,7 @@ function lineIntersection(line1: Line, line2: Line): Point | null | undefined {
     return { x, y };
 }
 
+function segmentLength(segment: LineSegment): number {
+    const sq = Math.pow(segment.end.x - segment.start.x, 2) + Math.pow(segment.end.y - segment.start.y, 2);
+    return Math.sqrt(sq);
+}
