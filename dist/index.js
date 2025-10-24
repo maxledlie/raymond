@@ -134,9 +134,18 @@ function lineContainingSegment(segment) {
 }
 function lineIntersection(line1, line2) {
     // Does the same as `segmentIntersections` but for entire lines
+    // Handle parallel lines
     if (line1.m == line2.m) {
         return line1.c == line2.c ? undefined : null;
     }
+    // Handle vertical lines
+    if (line1.m == Infinity) {
+        return { x: line1.c, y: line2.m * line1.c + line2.c };
+    }
+    if (line2.m == Infinity) {
+        return { x: line2.c, y: line1.m * line2.c + line1.c };
+    }
+    // Normal, well-behaved lines that intersect
     var x = (line2.c - line1.c) / (line1.m - line2.m);
     var y = line1.m * x + line1.c;
     return { x: x, y: y };
