@@ -75,6 +75,8 @@ var s = function (p) {
     p.draw = function () { return p5_draw(p); };
     p.mousePressed = function () { return p5_mouse_pressed(p); };
     p.mouseReleased = function () { return p5_mouse_released(p); };
+    p.touchStarted = function () { return p5_mouse_pressed(p); };
+    p.touchEnded = function () { return p5_mouse_released(p); };
 };
 var sketch = new p5(s);
 // -------

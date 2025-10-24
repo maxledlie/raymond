@@ -115,6 +115,8 @@ const s = ( p: p5 ) => {
     p.draw = () => p5_draw(p);
     p.mousePressed = () => p5_mouse_pressed(p);
     p.mouseReleased = () => p5_mouse_released(p);
+    p.touchStarted = () => p5_mouse_pressed(p);
+    p.touchEnded = () => p5_mouse_released(p);
 }
 
 const sketch = new p5(s);
