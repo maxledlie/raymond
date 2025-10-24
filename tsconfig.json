@@ -1,0 +1,6 @@
+{
+    "compilerOptions": {
+        "noImplicitAny": true,
+        "outFile": "./dist/index.js"
+    }
+}

@@ -1,0 +1,11 @@
+{
+    "name": "paper-cuts",
+    "version": "0.0.0",
+    "description": "Cut and paste.",
+    "scripts": {
+        "build": "tsc --watch"
+    },
+    "devDependencies": {
+        "@types/p5": "^1.7.7"
+    }
+}
