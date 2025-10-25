@@ -23,6 +23,7 @@ interface LineSegment {
 // Represents an intersection between two line segments.
 // Stores the indexes of the segments and the distance of the point along each of the lines.
 interface Intersection {
+    id: number;
     point: Vector;
     segment1Id: number;
     segment2Id: number;
@@ -30,16 +31,24 @@ interface Intersection {
     t2: number;
 }
 
+// An edge on the graph of connected intersection points
+interface Edge {
+    from: number;
+    to: number;
+}
+
 interface State {
     segments: LineSegment[];
     intersections: Intersection[];
     draggedLineStart: Vector | null;
+    graph: Edge[];
 }
 
 const state: State = {
     segments: [],
     intersections: [],
-    draggedLineStart: null
+    draggedLineStart: null,
+    graph: [],
 };
 
 function p5_setup(p: p5) {
@@ -61,6 +70,18 @@ function p5_draw(p: p5) {
     }
 
     if (DEBUG) {
+        // Draw graph edges. These should overlay the cuts but not extend beyond the intersections.
+        p.stroke("white");
+        p.strokeWeight(2);
+        for (const edge of state.graph) {
+            const from = state.intersections[edge.from];
+            const to = state.intersections[edge.to];
+            p.line(from.point.x, from.point.y, to.point.x, to.point.y);
+        }
+
+        // Draw intersections
+        p.stroke("black");
+        p.strokeWeight(1);
         p.fill("red");
         for (const intersection of state.intersections) {
             p.circle(intersection.point.x, intersection.point.y, 10);
@@ -103,10 +124,19 @@ function p5_mouse_released(p: p5) {
     const newIntersections: Intersection[] = [];
     for (let iSegment = 0; iSegment < state.segments.length; iSegment++) {
         const segment = state.segments[iSegment];
-        const intersection = segmentIntersections(segment, newSegment);
-        if (intersection) {
-            state.intersections.push(intersection);
+        const ix = segmentIntersection(newSegment, segment);
+        if (ix) {
+            newIntersections.push({ ...ix, id: state.intersections.length + newIntersections.length });
         }
+    }
+
+    // Create graph edges between the newly created intersections.
+    // We *could* create an edge for every pair of new intersections.
+    // But that would make the graph bigger and slow down the cycle search.
+    // So we sort the intersections by distance along the new segment and only connect sequential intersections.
+    const sorted = newIntersections.sort((ix) => ix.t1);
+    for (let i = 0; i < sorted.length - 1; i++) {
+        state.graph.push({ from: sorted[i].id, to: sorted[i+1].id });
     }
 
     state.segments.push(newSegment);
@@ -179,7 +209,7 @@ function mat_inverse(m: Mat2): Mat2 | undefined {
     return mat_mul(a, 1 / det);
 }
     
-function segmentIntersections(segment1: LineSegment, segment2: LineSegment): Intersection | null {
+function segmentIntersection(segment1: LineSegment, segment2: LineSegment): Omit<Intersection, "id"> | null {
     // Given two line segments:
     // - Returns the point of intersection if they intersect
     // - Returns null if they have no intersection or infinitely many intersection points (parallel and overlapping)

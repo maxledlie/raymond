@@ -1,8 +1,20 @@
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
 var DEBUG = true;
 var state = {
     segments: [],
     intersections: [],
-    draggedLineStart: null
+    draggedLineStart: null,
+    graph: [],
 };
 function p5_setup(p) {
     p.createCanvas(p.windowWidth, p.windowHeight);
@@ -20,9 +32,21 @@ function p5_draw(p) {
         p.line(state.draggedLineStart.x, state.draggedLineStart.y, p.mouseX, p.mouseY);
     }
     if (DEBUG) {
+        // Draw graph edges. These should overlay the cuts but not extend beyond the intersections.
+        p.stroke("white");
+        p.strokeWeight(2);
+        for (var _b = 0, _c = state.graph; _b < _c.length; _b++) {
+            var edge = _c[_b];
+            var from = state.intersections[edge.from];
+            var to = state.intersections[edge.to];
+            p.line(from.point.x, from.point.y, to.point.x, to.point.y);
+        }
+        // Draw intersections
+        p.stroke("black");
+        p.strokeWeight(1);
         p.fill("red");
-        for (var _b = 0, _c = state.intersections; _b < _c.length; _b++) {
-            var intersection = _c[_b];
+        for (var _d = 0, _e = state.intersections; _d < _e.length; _d++) {
+            var intersection = _e[_d];
             p.circle(intersection.point.x, intersection.point.y, 10);
         }
     }
@@ -58,10 +82,18 @@ function p5_mouse_released(p) {
     var newIntersections = [];
     for (var iSegment = 0; iSegment < state.segments.length; iSegment++) {
         var segment = state.segments[iSegment];
-        var intersection = segmentIntersections(segment, newSegment);
-        if (intersection) {
-            state.intersections.push(intersection);
+        var ix = segmentIntersection(newSegment, segment);
+        if (ix) {
+            newIntersections.push(__assign(__assign({}, ix), { id: state.intersections.length + newIntersections.length }));
         }
+    }
+    // Create graph edges between the newly created intersections.
+    // We *could* create an edge for every pair of new intersections.
+    // But that would make the graph bigger and slow down the cycle search.
+    // So we sort the intersections by distance along the new segment and only connect sequential intersections.
+    var sorted = newIntersections.sort(function (ix) { return ix.t1; });
+    for (var i = 0; i < sorted.length - 1; i++) {
+        state.graph.push({ from: sorted[i].id, to: sorted[i + 1].id });
     }
     state.segments.push(newSegment);
     state.intersections = state.intersections.concat(newIntersections);
@@ -120,7 +152,7 @@ function mat_inverse(m) {
     ];
     return mat_mul(a, 1 / det);
 }
-function segmentIntersections(segment1, segment2) {
+function segmentIntersection(segment1, segment2) {
     // Given two line segments:
     // - Returns the point of intersection if they intersect
     // - Returns null if they have no intersection or infinitely many intersection points (parallel and overlapping)
