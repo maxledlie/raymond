@@ -1,9 +1,11 @@
 const DEBUG = true;
 
-interface Point {
+interface Vector {
     x: number;
     y: number;
 }
+
+type Mat2 = number[][];
 
 // Represents a mathematical infinite line, defined by its gradient and y-intercept.
 // For vertical lines, the y-intercept is Infinity, and the y-intercept stores the x-coordinate instead.
@@ -13,20 +15,25 @@ interface Line {
 }
 
 interface LineSegment {
-    start: Point
-    end: Point
+    id: number;
+    start: Vector;
+    end: Vector;
 }
 
+// Represents an intersection between two line segments.
+// Stores the indexes of the segments and the distance of the point along each of the lines.
 interface Intersection {
-    point: Point;
-    segment1Index: number;
-    segment2Index: number;
+    point: Vector;
+    segment1Id: number;
+    segment2Id: number;
+    t1: number;
+    t2: number;
 }
 
 interface State {
     segments: LineSegment[];
     intersections: Intersection[];
-    draggedLineStart: Point | null;
+    draggedLineStart: Vector | null;
 }
 
 const state: State = {
@@ -68,6 +75,7 @@ function p5_mouse_pressed(p: p5) {
 
 function p5_mouse_released(p: p5) {
     const newSegment: LineSegment = {
+        id: state.segments.length,
         start: state.draggedLineStart,
         end: p.createVector(p.mouseX, p.mouseY)
     };
@@ -97,11 +105,7 @@ function p5_mouse_released(p: p5) {
         const segment = state.segments[iSegment];
         const intersection = segmentIntersections(segment, newSegment);
         if (intersection) {
-            state.intersections.push({
-                point: intersection,
-                segment1Index: iSegment,
-                segment2Index: state.segments.length
-            });
+            state.intersections.push(intersection);
         }
     }
 
@@ -125,51 +129,96 @@ const sketch = new p5(s);
 // MATH
 // -------
 
-function segmentIntersections(segment1: LineSegment, segment2: LineSegment): Point | null | undefined{
+function vec_add(a: Vector, b: Vector): Vector {
+    return { x: a.x + b.x, y: a.y + b.y };
+}
+
+function vec_sub(a: Vector, b: Vector): Vector {
+    return { x: a.x - b.x, y: a.y - b.y };
+}
+
+function vec_mul(a: Vector, scalar: number): Vector {
+    return { x: a.x * scalar, y: a.y * scalar };
+}
+
+function vec_div(a: Vector, scalar: number): Vector {
+    return { x: a.x / scalar, y: a.y / scalar };
+}
+
+function vec_magnitude(a: Vector): number {
+    return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2));
+}
+
+function vec_normalize(a: Vector): Vector {
+    return vec_div(a, vec_magnitude(a));
+}
+
+function mat_mul(a: Mat2, scalar: number): Mat2 {
+    return [
+        [ a[0][0] * scalar, a[0][1] * scalar ],
+        [ a[1][0] * scalar, a[1][1] * scalar ]
+    ];
+}
+
+function mat_mul_vec(a: Mat2, v: Vector | Vector): Vector | Vector {
+    return { 
+        x: a[0][0] * v.x + a[0][1] * v.y,
+        y: a[1][0] * v.x + a[1][1] * v.y
+    };
+}
+
+function mat_inverse(m: Mat2): Mat2 | undefined {
+    const det = m[0][0] * m[1][1] - m[0][1] * m[1][0];
+    if (det == 0) {
+        return undefined;
+    }
+    const a: Mat2 = [
+        [ m[1][1], -m[0][1] ],
+        [ -m[1][0], m[0][0] ]
+    ];
+    return mat_mul(a, 1 / det);
+}
+    
+function segmentIntersections(segment1: LineSegment, segment2: LineSegment): Intersection | null {
     // Given two line segments:
     // - Returns the point of intersection if they intersect
-    // - Returns null if they have no intersection
-    // - Returns undefined if they have infinitely many intersection points (parallel and overlapping)
-    const line1 = lineContainingSegment(segment1);
-    const line2 = lineContainingSegment(segment2);
-    const intersection = lineIntersection(line1, line2);
+    // - Returns null if they have no intersection or infinitely many intersection points (parallel and overlapping)
 
-    if (intersection == null) {
+    const x1: Vector = segment1.start;
+    const x2: Vector = segment2.start;
+    const d1: Vector = vec_sub(segment1.end, segment1.start);
+    const d2: Vector = vec_sub(segment2.end, segment2.start);
+    const length1 = vec_magnitude(d1);
+    const length2 = vec_magnitude(d2);
+    const v1: Vector = vec_div(d1, length1);
+    const v2: Vector = vec_div(d2, length2);
+
+    // t stores the distance of the point of intersection from the start of each line segment.
+    // The intersection only exists if this is less than the length of each segment.
+    const m: Mat2 = [
+        [ v1.x, -v2.x ],
+        [ v1.y, -v2.y ]
+    ];
+    const m_inv = mat_inverse(m);
+    if (m_inv == undefined) {
+        // Lines parallel
         return null;
     }
 
-    const xMin1 = Math.min(segment1.start.x, segment1.end.x);
-    const xMax1 = Math.max(segment1.start.x, segment1.end.x);
-    const xMin2 = Math.min(segment2.start.x, segment2.end.x);
-    const xMax2 = Math.max(segment2.start.x, segment2.end.x);
+    const delta = vec_sub(x2, x1);
+    const { x: t1, y: t2 } = mat_mul_vec(m_inv, delta);
 
-    if (intersection == undefined) {
-        // Lines are parallel.
-        const xMaxLeft = Math.min(xMax1, xMax2);
-        const xMinRight = Math.max(xMin1, xMin2);
-
-        if (xMaxLeft == xMinRight) {
-            // They exactly meet. Return the point of intersection
-            return { x: xMaxLeft, y: line1.m * xMaxLeft + line1.c };
-        } else if (xMaxLeft > xMinRight) {
-            // They overlap: infinitely many intersections.
-            return undefined;
-        } else {
-            // They do not meet: no intersections
-            return null;
-        }
+    if (t1 < 0 || t1 > length1 || t2 < 0 || t2 > length2) {
+        return null;
     }
 
-    // Lines are not parallel. Check if the point of intersection is within the bounds 
-    if (
-        intersection.x >= xMin1 &&
-        intersection.x <= xMax1 &&
-        intersection.x >= xMin2 &&
-        intersection.x <= xMax2
-    ) {
-        return intersection
-    } else {
-        return null;
+    const point = vec_add(x1, vec_mul(v1, t1));
+    return {
+        point, 
+        segment1Id: segment1.id,
+        segment2Id: segment2.id,
+        t1,
+        t2
     }
 }
 
@@ -183,29 +232,6 @@ function lineContainingSegment(segment: LineSegment): Line {
     return { m, c };
 }
 
-function lineIntersection(line1: Line, line2: Line): Point | null | undefined {
-    // Does the same as `segmentIntersections` but for entire lines
-    
-    // Handle parallel lines
-    if (line1.m == line2.m) {
-        return line1.c == line2.c ? undefined : null;
-    }
-
-    // Handle vertical lines
-    if (line1.m == Infinity) {
-        return { x: line1.c, y: line2.m * line1.c + line2.c };
-    }
-    if (line2.m == Infinity) {
-        return { x: line2.c, y: line1.m * line2.c + line1.c };
-    }
-
-    // Normal, well-behaved lines that intersect
-    const x = (line2.c - line1.c) / (line1.m - line2.m);
-    const y = line1.m * x + line1.c;
-    return { x, y };
-}
-
 function segmentLength(segment: LineSegment): number {
-    const sq = Math.pow(segment.end.x - segment.start.x, 2) + Math.pow(segment.end.y - segment.start.y, 2);
-    return Math.sqrt(sq);
+    return vec_magnitude(vec_sub(segment.end, segment.start));
 }

@@ -32,6 +32,7 @@ function p5_mouse_pressed(p) {
 }
 function p5_mouse_released(p) {
     var newSegment = {
+        id: state.segments.length,
         start: state.draggedLineStart,
         end: p.createVector(p.mouseX, p.mouseY)
     };
@@ -59,11 +60,7 @@ function p5_mouse_released(p) {
         var segment = state.segments[iSegment];
         var intersection = segmentIntersections(segment, newSegment);
         if (intersection) {
-            state.intersections.push({
-                point: intersection,
-                segment1Index: iSegment,
-                segment2Index: state.segments.length
-            });
+            state.intersections.push(intersection);
         }
     }
     state.segments.push(newSegment);
@@ -82,48 +79,83 @@ var sketch = new p5(s);
 // -------
 // MATH
 // -------
+function vec_add(a, b) {
+    return { x: a.x + b.x, y: a.y + b.y };
+}
+function vec_sub(a, b) {
+    return { x: a.x - b.x, y: a.y - b.y };
+}
+function vec_mul(a, scalar) {
+    return { x: a.x * scalar, y: a.y * scalar };
+}
+function vec_div(a, scalar) {
+    return { x: a.x / scalar, y: a.y / scalar };
+}
+function vec_magnitude(a) {
+    return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2));
+}
+function vec_normalize(a) {
+    return vec_div(a, vec_magnitude(a));
+}
+function mat_mul(a, scalar) {
+    return [
+        [a[0][0] * scalar, a[0][1] * scalar],
+        [a[1][0] * scalar, a[1][1] * scalar]
+    ];
+}
+function mat_mul_vec(a, v) {
+    return {
+        x: a[0][0] * v.x + a[0][1] * v.y,
+        y: a[1][0] * v.x + a[1][1] * v.y
+    };
+}
+function mat_inverse(m) {
+    var det = m[0][0] * m[1][1] - m[0][1] * m[1][0];
+    if (det == 0) {
+        return undefined;
+    }
+    var a = [
+        [m[1][1], -m[0][1]],
+        [-m[1][0], m[0][0]]
+    ];
+    return mat_mul(a, 1 / det);
+}
 function segmentIntersections(segment1, segment2) {
     // Given two line segments:
     // - Returns the point of intersection if they intersect
-    // - Returns null if they have no intersection
-    // - Returns undefined if they have infinitely many intersection points (parallel and overlapping)
-    var line1 = lineContainingSegment(segment1);
-    var line2 = lineContainingSegment(segment2);
-    var intersection = lineIntersection(line1, line2);
-    if (intersection == null) {
+    // - Returns null if they have no intersection or infinitely many intersection points (parallel and overlapping)
+    var x1 = segment1.start;
+    var x2 = segment2.start;
+    var d1 = vec_sub(segment1.end, segment1.start);
+    var d2 = vec_sub(segment2.end, segment2.start);
+    var length1 = vec_magnitude(d1);
+    var length2 = vec_magnitude(d2);
+    var v1 = vec_div(d1, length1);
+    var v2 = vec_div(d2, length2);
+    // t stores the distance of the point of intersection from the start of each line segment.
+    // The intersection only exists if this is less than the length of each segment.
+    var m = [
+        [v1.x, -v2.x],
+        [v1.y, -v2.y]
+    ];
+    var m_inv = mat_inverse(m);
+    if (m_inv == undefined) {
+        // Lines parallel
         return null;
     }
-    var xMin1 = Math.min(segment1.start.x, segment1.end.x);
-    var xMax1 = Math.max(segment1.start.x, segment1.end.x);
-    var xMin2 = Math.min(segment2.start.x, segment2.end.x);
-    var xMax2 = Math.max(segment2.start.x, segment2.end.x);
-    if (intersection == undefined) {
-        // Lines are parallel.
-        var xMaxLeft = Math.min(xMax1, xMax2);
-        var xMinRight = Math.max(xMin1, xMin2);
-        if (xMaxLeft == xMinRight) {
-            // They exactly meet. Return the point of intersection
-            return { x: xMaxLeft, y: line1.m * xMaxLeft + line1.c };
-        }
-        else if (xMaxLeft > xMinRight) {
-            // They overlap: infinitely many intersections.
-            return undefined;
-        }
-        else {
-            // They do not meet: no intersections
-            return null;
-        }
-    }
-    // Lines are not parallel. Check if the point of intersection is within the bounds 
-    if (intersection.x >= xMin1 &&
-        intersection.x <= xMax1 &&
-        intersection.x >= xMin2 &&
-        intersection.x <= xMax2) {
-        return intersection;
-    }
-    else {
+    var delta = vec_sub(x2, x1);
+    var _a = mat_mul_vec(m_inv, delta), t1 = _a.x, t2 = _a.y;
+    if (t1 < 0 || t1 > length1 || t2 < 0 || t2 > length2) {
         return null;
     }
+    var point = vec_add(x1, vec_mul(v1, t1));
+    return {
+        point: point,
+        segment1Id: segment1.id,
+        segment2Id: segment2.id,
+        t1: t1,
+        t2: t2
+    };
 }
 function lineContainingSegment(segment) {
     // Find gradient and y-intercept of the infinite line containing the segment.
@@ -134,25 +166,6 @@ function lineContainingSegment(segment) {
     var c = segment.start.y - m * segment.start.x;
     return { m: m, c: c };
 }
-function lineIntersection(line1, line2) {
-    // Does the same as `segmentIntersections` but for entire lines
-    // Handle parallel lines
-    if (line1.m == line2.m) {
-        return line1.c == line2.c ? undefined : null;
-    }
-    // Handle vertical lines
-    if (line1.m == Infinity) {
-        return { x: line1.c, y: line2.m * line1.c + line2.c };
-    }
-    if (line2.m == Infinity) {
-        return { x: line2.c, y: line1.m * line2.c + line1.c };
-    }
-    // Normal, well-behaved lines that intersect
-    var x = (line2.c - line1.c) / (line1.m - line2.m);
-    var y = line1.m * x + line1.c;
-    return { x: x, y: y };
-}
 function segmentLength(segment) {
-    var sq = Math.pow(segment.end.x - segment.start.x, 2) + Math.pow(segment.end.y - segment.start.y, 2);
-    return Math.sqrt(sq);
+    return vec_magnitude(vec_sub(segment.end, segment.start));
 }
