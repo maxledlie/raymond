@@ -1,4 +1,4 @@
-const DEBUG = true;
+const DEBUG = false;
 
 interface Vector {
     x: number;
@@ -37,10 +37,13 @@ interface Edge {
     to: number;
 }
 
+type Polygon = Vector[];
+
 interface State {
     segments: LineSegment[];
     intersections: Intersection[];
     draggedLineStart: Vector | null;
+    holes: Polygon[];
     graph: Edge[];
 }
 
@@ -49,6 +52,7 @@ const state: State = {
     intersections: [],
     draggedLineStart: null,
     graph: [],
+    holes: []
 };
 
 function p5_setup(p: p5) {
@@ -57,7 +61,6 @@ function p5_setup(p: p5) {
 
 function p5_draw(p: p5) {
     p.background("orange");
-    p.fill(255);
 
     // Draw saved segments
     for (const segment of state.segments) {
@@ -67,6 +70,16 @@ function p5_draw(p: p5) {
     // Draw the currently dragged segment
     if (state.draggedLineStart) {
         p.line(state.draggedLineStart.x, state.draggedLineStart.y, p.mouseX, p.mouseY);
+    }
+
+    // Draw holes
+    p.fill("black");
+    for (const hole of state.holes) {
+        p.beginShape();
+        for (const vertex of hole) {
+            p.vertex(vertex.x, vertex.y);
+        }
+        p.endShape();
     }
 
     if (DEBUG) {
@@ -83,8 +96,13 @@ function p5_draw(p: p5) {
         p.stroke("black");
         p.strokeWeight(1);
         p.fill("red");
-        for (const intersection of state.intersections) {
-            p.circle(intersection.point.x, intersection.point.y, 10);
+        for (const ix of state.intersections) {
+            p.circle(ix.point.x, ix.point.y, 10);
+        }
+
+        p.fill("black");
+        for (const ix of state.intersections) {
+            p.text(ix.id, ix.point.x - 10, ix.point.y - 5);
         }
     }
 
@@ -165,8 +183,17 @@ function p5_mouse_released(p: p5) {
         }
     }
 
-    state.segments.push(newSegment);
     state.intersections = state.intersections.concat(newIntersections);
+
+    // Find holes created by adding this line. This may return many duplicate holes.
+    for (const ix of newIntersections) {
+        const cycles = detectCycles(state.graph, ix.id);
+        for (const cycle of cycles) {
+            state.holes.push(cycle.map(x => ({ x: state.intersections[x].point.x, y: state.intersections[x].point.y })));
+        }
+    }
+
+    state.segments.push(newSegment);
     state.draggedLineStart = null;
 }
 
@@ -305,4 +332,39 @@ function lineContainingSegment(segment: LineSegment): Line {
 
 function segmentLength(segment: LineSegment): number {
     return vec_magnitude(vec_sub(segment.end, segment.start));
+}
+
+function detectCycles(graph: Edge[], root: number): number[][] {
+    const cycles: number[][] = [];
+    const path: number[] = [root];
+
+    function dfs(current: number, visited: Set<number>) {
+        // Find neighbours of current node
+        let neighbours: number[] = [];
+        neighbours = neighbours.concat(graph.filter(x => x.from == current).map(x => x.to));
+        neighbours = neighbours.concat(graph.filter(x => x.to == current).map(x => x.from));
+        
+        for (const neighbour of neighbours) {
+            if (neighbour == root) {
+                if (path.length > 2) {
+                    cycles.push([...path]);
+                }
+                continue;
+            }
+
+            if (!visited.has(neighbour)) {
+                path.push(neighbour);
+                visited.add(neighbour);
+                dfs(neighbour, visited);
+                visited.delete(neighbour);
+                path.pop();
+            }
+        }
+    }
+
+    // Start DFS with a visited set containing only the root
+    const visited = new Set<number>();
+    visited.add(root);
+    dfs(root, visited);
+    return cycles;
 }
