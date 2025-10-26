@@ -139,9 +139,50 @@ function p5_mouse_released(p: p5) {
         state.graph.push({ from: sorted[i].id, to: sorted[i+1].id });
     }
 
+    // Each newly created intersection, ix, connects the new segment, A, to some other segment, B.
+    // We need to add edges to the graph connecting ix to the closest existing intersections to either side on B.
+    // NOTE: The current implementation *keeps* the graph edge between these closest existing intersections,
+    // making the graph a little more complex than necessary but keeping the edge list append-only.
+    for (const ix of newIntersections) {
+        const oldSegmentId = ix.segment2Id;
+        const intersectionSequence = sortedIntersectionsOnSegment(oldSegmentId);
+
+        // Find index where new intersection would sit if inserted in the intersection sequence, maintaining sort order
+        let j = 0;
+        for (let i = 0; i < intersectionSequence.length; i++) {
+            if (intersectionSequence[i].t > ix.t2) {
+                j = i;
+                break;
+            }
+        }
+        if (j > 0) {
+            const prevIntersectionId = intersectionSequence[j - 1].intersectionId;
+            state.graph.push({ from: prevIntersectionId, to: ix.id });
+        }
+        if (j < intersectionSequence.length) {
+            const nextIntersectionId = intersectionSequence[j].intersectionId;
+            state.graph.push({ from: ix.id, to: nextIntersectionId });
+        }
+    }
+
     state.segments.push(newSegment);
     state.intersections = state.intersections.concat(newIntersections);
     state.draggedLineStart = null;
+}
+
+function sortedIntersectionsOnSegment(segmentId: number): { intersectionId: number; t: number; }[] {
+    // Returns all intersections that lie on the given segment, sorted by increasing t-value.
+    // OPT: I expect this function will take up the bulk of calculation time. Could optimise with some hash tables or something.
+    const ixs = [];
+    for (const ix of state.intersections) {
+        if (ix.segment1Id == segmentId) {
+            ixs.push({ intersectionId: ix.id, t: ix.t1 });
+        }
+        if (ix.segment2Id == segmentId) {
+            ixs.push({ intersectionId: ix.id, t: ix.t2 });
+        }
+    }
+    return ixs.sort(x => x.t);
 }
 
 const s = ( p: p5 ) => {

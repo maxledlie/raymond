@@ -95,9 +95,49 @@ function p5_mouse_released(p) {
     for (var i = 0; i < sorted.length - 1; i++) {
         state.graph.push({ from: sorted[i].id, to: sorted[i + 1].id });
     }
+    // Each newly created intersection, ix, connects the new segment, A, to some other segment, B.
+    // We need to add edges to the graph connecting ix to the closest existing intersections to either side on B.
+    // NOTE: The current implementation *keeps* the graph edge between these closest existing intersections,
+    // making the graph a little more complex than necessary but keeping the edge list append-only.
+    for (var _i = 0, newIntersections_1 = newIntersections; _i < newIntersections_1.length; _i++) {
+        var ix = newIntersections_1[_i];
+        var oldSegmentId = ix.segment2Id;
+        var intersectionSequence = sortedIntersectionsOnSegment(oldSegmentId);
+        // Find index where new intersection would sit if inserted in the intersection sequence, maintaining sort order
+        var j = 0;
+        for (var i = 0; i < intersectionSequence.length; i++) {
+            if (intersectionSequence[i].t > ix.t2) {
+                j = i;
+                break;
+            }
+        }
+        if (j > 0) {
+            var prevIntersectionId = intersectionSequence[j - 1].intersectionId;
+            state.graph.push({ from: prevIntersectionId, to: ix.id });
+        }
+        if (j < intersectionSequence.length) {
+            var nextIntersectionId = intersectionSequence[j].intersectionId;
+            state.graph.push({ from: ix.id, to: nextIntersectionId });
+        }
+    }
     state.segments.push(newSegment);
     state.intersections = state.intersections.concat(newIntersections);
     state.draggedLineStart = null;
+}
+function sortedIntersectionsOnSegment(segmentId) {
+    // Returns all intersections that lie on the given segment, sorted by increasing t-value.
+    // OPT: I expect this function will take up the bulk of calculation time. Could optimise with some hash tables or something.
+    var ixs = [];
+    for (var _i = 0, _a = state.intersections; _i < _a.length; _i++) {
+        var ix = _a[_i];
+        if (ix.segment1Id == segmentId) {
+            ixs.push({ intersectionId: ix.id, t: ix.t1 });
+        }
+        if (ix.segment2Id == segmentId) {
+            ixs.push({ intersectionId: ix.id, t: ix.t2 });
+        }
+    }
+    return ixs.sort(function (x) { return x.t; });
 }
 var s = function (p) {
     p.setup = function () { return p5_setup(p); };
