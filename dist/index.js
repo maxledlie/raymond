@@ -12,6 +12,7 @@ function p5_setup(p) {
 function p5_draw(p) {
     p.background("orange");
     // Draw saved segments
+    p.stroke("black");
     for (const segment of state.segments) {
         p.line(segment.start.x, segment.start.y, segment.end.x, segment.end.y);
     }
@@ -44,9 +45,11 @@ function p5_draw(p) {
         for (const ix of state.intersections) {
             p.circle(ix.point.x, ix.point.y, 10);
         }
-        p.fill("black");
+        p.fill("green");
+        p.stroke("green");
+        p.textSize(16);
         for (const ix of state.intersections) {
-            p.text(ix.id, ix.point.x - 10, ix.point.y - 5);
+            p.text(ix.id, ix.point.x - 12, ix.point.y - 6);
         }
     }
 }
@@ -119,15 +122,27 @@ function p5_mouse_released(p) {
         }
     }
     state.intersections = state.intersections.concat(newIntersections);
-    // Find holes created by adding this line. This may return many duplicate holes.
+    // Find new cycles created by adding this segment. This will contain duplicates which we remove
+    // to dampen the combinatorial explosion.
+    let newCycles = [];
     for (const ix of newIntersections) {
-        const cycles = detectCycles(state.graph, ix.id);
-        for (const cycle of cycles) {
-            state.holes.push(cycle.map(x => ({ x: state.intersections[x].point.x, y: state.intersections[x].point.y })));
-        }
+        newCycles = newCycles.concat(detectCycles(state.graph, ix.id));
+    }
+    // console.log("cycles before dedupe:");
+    // for (const cycle of newCycles) {
+    //     console.log(cycle);
+    // }
+    newCycles = dedupeCycles(newCycles);
+    // console.log("cycles after dedupe:");
+    // for (const cycle of newCycles) {
+    //     console.log(cycle);
+    // }
+    for (const cycle of newCycles) {
+        state.holes.push(cycle.map(x => ({ x: state.intersections[x].point.x, y: state.intersections[x].point.y })));
     }
     state.segments.push(newSegment);
     state.draggedLineStart = null;
+    // console.log("num holes: ", state.holes.length);
 }
 function sortedIntersectionsOnSegment(segmentId) {
     // Returns all intersections that lie on the given segment, sorted by increasing t-value.
@@ -152,6 +167,41 @@ const s = (p) => {
     p.touchEnded = () => p5_mouse_released(p);
 };
 const sketch = new p5(s);
+/**
+ * Convert a cycle into a canonical representation.
+ * Handles rotation and direction reversal deduplication.
+ */
+function canonicalizeCycle(cycle) {
+    const core = cycle.slice(); // copy
+    // Find index of lexicographically smallest node
+    let minIndex = 0;
+    for (let i = 1; i < core.length; i++) {
+        if (core[i] < core[minIndex]) {
+            minIndex = i;
+        }
+    }
+    // Rotate so smallest node comes first
+    const rotated = core.slice(minIndex).concat(core.slice(0, minIndex));
+    // Create forward and reversed forms
+    const reverse = [rotated[0], ...rotated.slice(1).reverse()];
+    const forward_str = rotated.map(toString).join(",");
+    const reverse_str = reverse.map(toString).join(",");
+    // Choose canonical: lexicographically smallest representation
+    return rotated < reverse ? forward_str : reverse_str;
+}
+/**
+ * Remove duplicate cycles.
+ */
+function dedupeCycles(cycles) {
+    const seen = new Map();
+    for (const cycle of cycles) {
+        const key = canonicalizeCycle(cycle);
+        if (!seen.has(key)) {
+            seen.set(key, cycle);
+        }
+    }
+    return [...seen.values()];
+}
 // -------
 // MATH
 // -------
