@@ -1,5 +1,3 @@
-const DEBUG = false;
-
 interface Vector {
     x: number;
     y: number;
@@ -40,6 +38,7 @@ interface Edge {
 type Polygon = Vector[];
 
 interface State {
+    debug: boolean;
     segments: LineSegment[];
     intersections: Intersection[];
     draggedLineStart: Vector | null;
@@ -48,6 +47,7 @@ interface State {
 }
 
 const state: State = {
+    debug: false,
     segments: [],
     intersections: [],
     draggedLineStart: null,
@@ -61,9 +61,15 @@ function p5_setup(p: p5) {
 
 function p5_draw(p: p5) {
     p.background("orange");
+    p.stroke("black");
+    p.fill("black");
+
+    p.strokeWeight(0.5);
+    p.textSize(14);
+    p.text("Draw lines and make shapes!\nOn desktop? Press space for debug mode.", 10, 20);
+    p.strokeWeight(1);
 
     // Draw saved segments
-    p.stroke("black");
     for (const segment of state.segments) {
         p.line(segment.start.x, segment.start.y, segment.end.x, segment.end.y);
     }
@@ -83,7 +89,7 @@ function p5_draw(p: p5) {
         p.endShape();
     }
 
-    if (DEBUG) {
+    if (state.debug) {
         // Draw graph edges. These should overlay the cuts but not extend beyond the intersections.
         p.stroke("white");
         p.strokeWeight(2);
@@ -113,6 +119,12 @@ function p5_draw(p: p5) {
 
 function p5_mouse_pressed(p: p5) {
     state.draggedLineStart = p.createVector(p.mouseX, p.mouseY);
+}
+
+function p5_key_pressed(p: p5) {
+    if (p.key == " ") {
+        state.debug = !state.debug;
+    }
 }
 
 function p5_mouse_released(p: p5) {
@@ -234,6 +246,7 @@ function sortedIntersectionsOnSegment(segmentId: number): { intersectionId: numb
 const s = ( p: p5 ) => {
     p.setup = () => p5_setup(p);
     p.draw = () => p5_draw(p);
+    p.keyPressed = () => p5_key_pressed(p);
     p.mousePressed = () => p5_mouse_pressed(p);
     p.mouseReleased = () => p5_mouse_released(p);
     p.touchStarted = () => p5_mouse_pressed(p);
