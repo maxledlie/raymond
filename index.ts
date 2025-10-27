@@ -37,6 +37,9 @@ interface Edge {
 
 type Polygon = Vector[];
 
+// Config
+const MIN_SEGMENT_LENGTH = 10;
+
 interface State {
     debug: boolean;
     segments: LineSegment[];
@@ -133,6 +136,10 @@ function p5_mouse_released(p: p5) {
         start: state.draggedLineStart,
         end: p.createVector(p.mouseX, p.mouseY)
     };
+    state.draggedLineStart = null;
+    if (segmentLength(newSegment) < MIN_SEGMENT_LENGTH) {
+        return false;
+    } 
 
     // As a debugging aid, if SHIFT is held, snap lines to horizontal or vertical if they are close enough
     if (p.keyIsDown(p.SHIFT)) {
@@ -206,26 +213,21 @@ function p5_mouse_released(p: p5) {
     for (const ix of newIntersections) {
         newCycles = newCycles.concat(detectCycles(state.graph, ix.id));
     }
-    // console.log("cycles before dedupe:");
-    // for (const cycle of newCycles) {
-    //     console.log(cycle);
-    // }
 
     newCycles = dedupeCycles(newCycles);
 
-    // console.log("cycles after dedupe:");
-    // for (const cycle of newCycles) {
-    //     console.log(cycle);
-    // }
+    console.log("cycles after dedupe:");
+    for (const cycle of newCycles) {
+        console.log(cycle);
+    }
 
     for (const cycle of newCycles) {
         state.holes.push(cycle.map(x => ({ x: state.intersections[x].point.x, y: state.intersections[x].point.y })));
     }
 
     state.segments.push(newSegment);
-    state.draggedLineStart = null;
     
-    // console.log("num holes: ", state.holes.length);
+    console.log("num holes: ", state.holes.length);
 }
 
 function sortedIntersectionsOnSegment(segmentId: number): { intersectionId: number; t: number; }[] {
