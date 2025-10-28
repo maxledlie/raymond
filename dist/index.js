@@ -1,12 +1,14 @@
+import { Graph, draw_graph } from "./graph.js";
 import { vec_add, vec_sub, vec_div, vec_mul, vec_magnitude, mat_inverse, mat_mul_vec } from "./math.js";
 // Config
 const MIN_SEGMENT_LENGTH = 10;
 const state = {
-    debug: false,
+    debug: true,
     segments: [],
     intersections: [],
     draggedLineStart: null,
     graph: [],
+    debugGraph: new Graph([], 50),
     holes: []
 };
 function p5_setup(p) {
@@ -59,6 +61,9 @@ function p5_draw(p) {
         for (const ix of state.intersections) {
             p.text(ix.id, ix.point.x - 12, ix.point.y - 6);
         }
+        // Draw clearer view of underlying graph
+        p.translate(p.width / 2, p.height / 2);
+        draw_graph(p, state.debugGraph);
     }
 }
 function p5_mouse_pressed(p) {
@@ -112,7 +117,7 @@ function p5_mouse_released(p) {
     // So we sort the intersections by distance along the new segment and only connect sequential intersections.
     const sorted = newIntersections.sort((ix) => ix.t1);
     for (let i = 0; i < sorted.length - 1; i++) {
-        state.graph.push({ from: sorted[i].id, to: sorted[i + 1].id });
+        addEdge(sorted[i].id, sorted[i + 1].id);
     }
     // Each newly created intersection, ix, connects the new segment, A, to some other segment, B.
     // We need to add edges to the graph connecting ix to the closest existing intersections to either side on B.
@@ -131,11 +136,11 @@ function p5_mouse_released(p) {
         }
         if (j > 0) {
             const prevIntersectionId = intersectionSequence[j - 1].intersectionId;
-            state.graph.push({ from: prevIntersectionId, to: ix.id });
+            addEdge(prevIntersectionId, ix.id);
         }
         if (j < intersectionSequence.length) {
             const nextIntersectionId = intersectionSequence[j].intersectionId;
-            state.graph.push({ from: ix.id, to: nextIntersectionId });
+            addEdge(ix.id, nextIntersectionId);
         }
     }
     state.intersections = state.intersections.concat(newIntersections);
@@ -155,6 +160,11 @@ function p5_mouse_released(p) {
     }
     state.segments.push(newSegment);
     console.log("num holes: ", state.holes.length);
+}
+function addEdge(from, to) {
+    state.graph.push({ from, to });
+    state.debugGraph.addEdge({ from, to });
+    console.log("debugGraph: ", state.debugGraph);
 }
 function sortedIntersectionsOnSegment(segmentId) {
     // Returns all intersections that lie on the given segment, sorted by increasing t-value.
