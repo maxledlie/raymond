@@ -12,6 +12,7 @@ interface Node {
     id: number;
     position: Vector;
     velocity: Vector;
+    componentId?: number;
 }
 
 export class Graph {
@@ -41,6 +42,98 @@ export class Graph {
         if (!this.nodes.get(edge.to)) {
             this.nodes.set(edge.to, this.initNode(edge.to));
         }
+
+        // Recompute bi-connected components after each edge addition
+        this.computeBiconnectedComponents();
+    }
+
+    /**
+     * Tarjan's algorithm for bi-connected components.
+     * Updates each node's componentId property.
+     */
+    computeBiconnectedComponents() {
+        const nodes = Array.from(this.nodes.values());
+        const n = nodes.length;
+        const nodeIdToIndex = new Map<number, number>();
+        nodes.forEach((node, idx) => nodeIdToIndex.set(node.id, idx));
+
+        // Build adjacency list
+    const adj: number[][] = Array(n).fill(null).map((): number[] => []);
+        for (const edge of this.edges) {
+            const u = nodeIdToIndex.get(edge.from);
+            const v = nodeIdToIndex.get(edge.to);
+            if (u !== undefined && v !== undefined) {
+                adj[u].push(v);
+                adj[v].push(u);
+            }
+        }
+
+        // Tarjan's variables
+        let time = 0;
+        const disc = Array(n).fill(-1);
+        const low = Array(n).fill(-1);
+        const parent = Array(n).fill(-1);
+        const stack: [number, number][] = [];
+        let componentId = 0;
+        const componentMap: number[][] = [];
+
+        function dfs(u: number) {
+            disc[u] = low[u] = ++time;
+            let children = 0;
+            for (const v of adj[u]) {
+                if (disc[v] === -1) {
+                    parent[v] = u;
+                    stack.push([u, v]);
+                    children++;
+                    dfs(v);
+                    low[u] = Math.min(low[u], low[v]);
+
+                    // If u is an articulation point, pop edges for this component
+                    if ((parent[u] === -1 && children > 1) || (parent[u] !== -1 && low[v] >= disc[u])) {
+                        const component: number[] = [];
+                        let e;
+                        do {
+                            e = stack.pop();
+                            if (e) {
+                                if (!component.includes(e[0])) component.push(e[0]);
+                                if (!component.includes(e[1])) component.push(e[1]);
+                            }
+                        } while (e && (e[0] !== u || e[1] !== v));
+                        componentMap.push(component);
+                    }
+                } else if (v !== parent[u] && disc[v] < disc[u]) {
+                    low[u] = Math.min(low[u], disc[v]);
+                    stack.push([u, v]);
+                }
+            }
+        }
+
+        // Run DFS from all unvisited nodes
+        for (let i = 0; i < n; i++) {
+            if (disc[i] === -1) {
+                dfs(i);
+                // Pop remaining edges in stack as a component
+                if (stack.length > 0) {
+                    const component: number[] = [];
+                    while (stack.length > 0) {
+                        const e = stack.pop();
+                        if (e) {
+                            if (!component.includes(e[0])) component.push(e[0]);
+                            if (!component.includes(e[1])) component.push(e[1]);
+                        }
+                    }
+                    componentMap.push(component);
+                }
+            }
+        }
+
+        // Assign componentId to nodes
+        nodes.forEach(node => { node.componentId = undefined; });
+        componentMap.forEach((component, idx) => {
+            for (const i of component) {
+                nodes[i].componentId = idx;
+            }
+        });
     }
 
     initNode(id: number): Node {
@@ -107,14 +200,22 @@ export class Graph {
 
 export function draw_graph(p: p5, graph: Graph) {
     p.stroke("black");
-    p.fill("white");
+    // Color palette for components
+    const palette = [
+        "#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#ffff33", "#a65628", "#f781bf", "#999999"
+    ];
     for (const edge of graph.edges) {
         const from = graph.nodes.get(edge.from);
         const to = graph.nodes.get(edge.to);
         p.line(from.position.x, from.position.y, to.position.x, to.position.y);
     }
     for (const node of graph.nodes.values()) {
-        p.fill("white");
+        // Pick color by componentId, fallback to white
+        let color = "white";
+        if (typeof node.componentId === "number") {
+            color = palette[node.componentId % palette.length];
+        }
+        p.fill(color);
         p.circle(node.position.x, node.position.y, 10);
         p.fill("black");
         p.text(node.id, node.position.x - 10, node.position.y - 10);
