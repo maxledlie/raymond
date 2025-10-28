@@ -223,24 +223,19 @@ function p5_mouse_released(p: p5) {
 
     // Find new cycles created by adding this segment. This will contain duplicates which we remove
     // to dampen the combinatorial explosion.
-    let newCycles: number[][] = [];
-    for (const ix of newIntersections) {
-        newCycles = newCycles.concat(detectCycles(state.graph, ix.id));
+    if (newIntersections.length > 1) {
+        let newCycles: number[][] = [];
+        for (const ix of newIntersections) {
+            newCycles = newCycles.concat(detectCycles(state.graph, ix.id));
+        }
+
+        newCycles = dedupeCycles(newCycles);
+
+        for (const cycle of newCycles) {
+            state.holes.push(cycle.map(x => ({ x: state.intersections[x].point.x, y: state.intersections[x].point.y })));
+        }
     }
-
-    newCycles = dedupeCycles(newCycles);
-
-    for (const cycle of newCycles) {
-        console.log(cycle);
-    }
-
-    for (const cycle of newCycles) {
-        state.holes.push(cycle.map(x => ({ x: state.intersections[x].point.x, y: state.intersections[x].point.y })));
-    }
-
     state.segments.push(newSegment);
-
-    console.log("num holes: ", state.holes.length);
 }
 
 function addEdge(from: number, to: number) {
