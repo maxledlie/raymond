@@ -128,15 +128,14 @@ function p5_mouse_released(p) {
     // NOTE: The current implementation *keeps* the graph edge between these closest existing intersections,
     // making the graph a little more complex than necessary but keeping the edge list append-only.
     for (const ix of newIntersections) {
+        console.log("ix.t2: ", ix.t2);
         const oldSegmentId = ix.segment2Id;
         const intersectionSequence = sortedIntersectionsOnSegment(oldSegmentId);
+        console.log("intersectionSequence: ", intersectionSequence);
         // Find index where new intersection would sit if inserted in the intersection sequence, maintaining sort order
-        let j = 0;
-        for (let i = 0; i < intersectionSequence.length; i++) {
-            if (intersectionSequence[i].t > ix.t2) {
-                j = i;
-                break;
-            }
+        let j = intersectionSequence.findIndex(x => x.t > ix.t2);
+        if (j == -1) {
+            j = intersectionSequence.length;
         }
         if (j > 0) {
             const prevIntersectionId = intersectionSequence[j - 1].intersectionId;

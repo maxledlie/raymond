@@ -33,6 +33,7 @@ export class Graph {
         });
     }
     update(dt) {
+        const _dt = Math.max(dt, 0.1);
         const nodeList = Array.from(this.nodes.values());
         const forces = new Array(nodeList.length).fill({ x: 0, y: 0 });
         for (let i = 0; i < nodeList.length; i++) {
@@ -62,8 +63,8 @@ export class Graph {
         for (let i = 0; i < nodeList.length; i++) {
             const nodeId = nodeList[i].id;
             const node = this.nodes.get(nodeId);
-            node.position = vec_add(node.position, vec_mul(node.velocity, dt));
-            node.velocity = vec_add(node.velocity, vec_mul(forces[i], dt / this.nodeMass));
+            node.position = vec_add(node.position, vec_mul(node.velocity, _dt));
+            node.velocity = vec_add(node.velocity, vec_mul(forces[i], _dt / this.nodeMass));
         }
         // Annealing
         for (const node of this.nodes.values()) {
