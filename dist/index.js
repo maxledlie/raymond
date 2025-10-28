@@ -39,6 +39,7 @@ function p5_draw(p) {
         }
         p.endShape();
     }
+    state.debugGraph.update(p.deltaTime);
     if (state.debug) {
         // Draw graph edges. These should overlay the cuts but not extend beyond the intersections.
         p.stroke("white");
