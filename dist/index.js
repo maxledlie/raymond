@@ -1,3 +1,4 @@
+import { vec_add, vec_sub, vec_div, vec_mul, vec_magnitude, mat_inverse, mat_mul_vec } from "./math.js";
 // Config
 const MIN_SEGMENT_LENGTH = 10;
 const state = {
@@ -213,50 +214,6 @@ function dedupeCycles(cycles) {
         }
     }
     return [...seen.values()];
-}
-// -------
-// MATH
-// -------
-function vec_add(a, b) {
-    return { x: a.x + b.x, y: a.y + b.y };
-}
-function vec_sub(a, b) {
-    return { x: a.x - b.x, y: a.y - b.y };
-}
-function vec_mul(a, scalar) {
-    return { x: a.x * scalar, y: a.y * scalar };
-}
-function vec_div(a, scalar) {
-    return { x: a.x / scalar, y: a.y / scalar };
-}
-function vec_magnitude(a) {
-    return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2));
-}
-function vec_normalize(a) {
-    return vec_div(a, vec_magnitude(a));
-}
-function mat_mul(a, scalar) {
-    return [
-        [a[0][0] * scalar, a[0][1] * scalar],
-        [a[1][0] * scalar, a[1][1] * scalar]
-    ];
-}
-function mat_mul_vec(a, v) {
-    return {
-        x: a[0][0] * v.x + a[0][1] * v.y,
-        y: a[1][0] * v.x + a[1][1] * v.y
-    };
-}
-function mat_inverse(m) {
-    const det = m[0][0] * m[1][1] - m[0][1] * m[1][0];
-    if (det == 0) {
-        return undefined;
-    }
-    const a = [
-        [m[1][1], -m[0][1]],
-        [-m[1][0], m[0][0]]
-    ];
-    return mat_mul(a, 1 / det);
 }
 function segmentIntersection(segment1, segment2) {
     // Given two line segments:

@@ -1,9 +1,4 @@
-interface Vector {
-    x: number;
-    y: number;
-}
-
-type Mat2 = number[][];
+import { Vector, Mat2, vec_add, vec_sub, vec_div, vec_mul, vec_magnitude, mat_inverse, mat_mul_vec } from "./math.js";
 
 // Represents a mathematical infinite line, defined by its gradient and y-intercept.
 // For vertical lines, the y-intercept is Infinity, and the y-intercept stores the x-coordinate instead.
@@ -139,7 +134,7 @@ function p5_mouse_released(p: p5) {
     state.draggedLineStart = null;
     if (segmentLength(newSegment) < MIN_SEGMENT_LENGTH) {
         return false;
-    } 
+    }
 
     // As a debugging aid, if SHIFT is held, snap lines to horizontal or vertical if they are close enough
     if (p.keyIsDown(p.SHIFT)) {
@@ -176,7 +171,7 @@ function p5_mouse_released(p: p5) {
     // So we sort the intersections by distance along the new segment and only connect sequential intersections.
     const sorted = newIntersections.sort((ix) => ix.t1);
     for (let i = 0; i < sorted.length - 1; i++) {
-        state.graph.push({ from: sorted[i].id, to: sorted[i+1].id });
+        state.graph.push({ from: sorted[i].id, to: sorted[i + 1].id });
     }
 
     // Each newly created intersection, ix, connects the new segment, A, to some other segment, B.
@@ -226,7 +221,7 @@ function p5_mouse_released(p: p5) {
     }
 
     state.segments.push(newSegment);
-    
+
     console.log("num holes: ", state.holes.length);
 }
 
@@ -245,7 +240,7 @@ function sortedIntersectionsOnSegment(segmentId: number): { intersectionId: numb
     return ixs.sort(x => x.t);
 }
 
-const s = ( p: p5 ) => {
+const s = (p: p5) => {
     p.setup = () => p5_setup(p);
     p.draw = () => p5_draw(p);
     p.keyPressed = () => p5_key_pressed(p);
@@ -262,27 +257,27 @@ const sketch = new p5(s);
  * Handles rotation and direction reversal deduplication.
  */
 function canonicalizeCycle(cycle: number[]): string {
-  const core = cycle.slice(); // copy
+    const core = cycle.slice(); // copy
 
-  // Find index of lexicographically smallest node
-  let minIndex = 0;
-  for (let i = 1; i < core.length; i++) {
-    if (core[i] < core[minIndex]) {
-      minIndex = i;
+    // Find index of lexicographically smallest node
+    let minIndex = 0;
+    for (let i = 1; i < core.length; i++) {
+        if (core[i] < core[minIndex]) {
+            minIndex = i;
+        }
     }
-  }
 
-  // Rotate so smallest node comes first
-  const rotated = core.slice(minIndex).concat(core.slice(0, minIndex));
+    // Rotate so smallest node comes first
+    const rotated = core.slice(minIndex).concat(core.slice(0, minIndex));
 
-  // Create forward and reversed forms
-  const reverse = [rotated[0], ...rotated.slice(1).reverse()];
+    // Create forward and reversed forms
+    const reverse = [rotated[0], ...rotated.slice(1).reverse()];
 
-  const forward_str = rotated.map(toString).join(",");
-  const reverse_str = reverse.map(toString).join(",");
+    const forward_str = rotated.map(toString).join(",");
+    const reverse_str = reverse.map(toString).join(",");
 
-  // Choose canonical: lexicographically smallest representation
-  return rotated < reverse ? forward_str : reverse_str;
+    // Choose canonical: lexicographically smallest representation
+    return rotated < reverse ? forward_str : reverse_str;
 }
 
 
@@ -300,60 +295,6 @@ function dedupeCycles(cycles: number[][]): number[][] {
     return [...seen.values()];
 }
 
-// -------
-// MATH
-// -------
-
-function vec_add(a: Vector, b: Vector): Vector {
-    return { x: a.x + b.x, y: a.y + b.y };
-}
-
-function vec_sub(a: Vector, b: Vector): Vector {
-    return { x: a.x - b.x, y: a.y - b.y };
-}
-
-function vec_mul(a: Vector, scalar: number): Vector {
-    return { x: a.x * scalar, y: a.y * scalar };
-}
-
-function vec_div(a: Vector, scalar: number): Vector {
-    return { x: a.x / scalar, y: a.y / scalar };
-}
-
-function vec_magnitude(a: Vector): number {
-    return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2));
-}
-
-function vec_normalize(a: Vector): Vector {
-    return vec_div(a, vec_magnitude(a));
-}
-
-function mat_mul(a: Mat2, scalar: number): Mat2 {
-    return [
-        [ a[0][0] * scalar, a[0][1] * scalar ],
-        [ a[1][0] * scalar, a[1][1] * scalar ]
-    ];
-}
-
-function mat_mul_vec(a: Mat2, v: Vector | Vector): Vector | Vector {
-    return { 
-        x: a[0][0] * v.x + a[0][1] * v.y,
-        y: a[1][0] * v.x + a[1][1] * v.y
-    };
-}
-
-function mat_inverse(m: Mat2): Mat2 | undefined {
-    const det = m[0][0] * m[1][1] - m[0][1] * m[1][0];
-    if (det == 0) {
-        return undefined;
-    }
-    const a: Mat2 = [
-        [ m[1][1], -m[0][1] ],
-        [ -m[1][0], m[0][0] ]
-    ];
-    return mat_mul(a, 1 / det);
-}
-    
 function segmentIntersection(segment1: LineSegment, segment2: LineSegment): Omit<Intersection, "id"> | null {
     // Given two line segments:
     // - Returns the point of intersection if they intersect
@@ -371,8 +312,8 @@ function segmentIntersection(segment1: LineSegment, segment2: LineSegment): Omit
     // t stores the distance of the point of intersection from the start of each line segment.
     // The intersection only exists if this is less than the length of each segment.
     const m: Mat2 = [
-        [ v1.x, -v2.x ],
-        [ v1.y, -v2.y ]
+        [v1.x, -v2.x],
+        [v1.y, -v2.y]
     ];
     const m_inv = mat_inverse(m);
     if (m_inv == undefined) {
@@ -389,7 +330,7 @@ function segmentIntersection(segment1: LineSegment, segment2: LineSegment): Omit
 
     const point = vec_add(x1, vec_mul(v1, t1));
     return {
-        point, 
+        point,
         segment1Id: segment1.id,
         segment2Id: segment2.id,
         t1,
@@ -420,7 +361,7 @@ function detectCycles(graph: Edge[], root: number): number[][] {
         let neighbours: number[] = [];
         neighbours = neighbours.concat(graph.filter(x => x.from == current).map(x => x.to));
         neighbours = neighbours.concat(graph.filter(x => x.to == current).map(x => x.from));
-        
+
         for (const neighbour of neighbours) {
             if (neighbour == root) {
                 if (path.length > 2) {
