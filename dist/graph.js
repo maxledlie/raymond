@@ -21,6 +21,14 @@ export class Graph {
         // Recompute bi-connected components after each edge addition
         this.computeBiconnectedComponents();
     }
+    removeEdge(edge) {
+        console.log("removing edge: ", edge);
+        function match(e) {
+            return e.from == edge.from && e.to == edge.to || e.to == edge.from && e.from == edge.to;
+        }
+        this.edges = this.edges.filter(x => !match(x));
+        this.computeBiconnectedComponents();
+    }
     /**
      * Tarjan's algorithm for bi-connected components.
      * Updates each node's componentId property.

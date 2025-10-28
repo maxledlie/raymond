@@ -125,8 +125,6 @@ function p5_mouse_released(p) {
     }
     // Each newly created intersection, ix, connects the new segment, A, to some other segment, B.
     // We need to add edges to the graph connecting ix to the closest existing intersections to either side on B.
-    // NOTE: The current implementation *keeps* the graph edge between these closest existing intersections,
-    // making the graph a little more complex than necessary but keeping the edge list append-only.
     for (const ix of newIntersections) {
         console.log("ix.t2: ", ix.t2);
         const oldSegmentId = ix.segment2Id;
@@ -137,6 +135,7 @@ function p5_mouse_released(p) {
         if (j == -1) {
             j = intersectionSequence.length;
         }
+        console.log("insertion index: ", j);
         if (j > 0) {
             const prevIntersectionId = intersectionSequence[j - 1].intersectionId;
             addEdge(prevIntersectionId, ix.id);
@@ -144,6 +143,12 @@ function p5_mouse_released(p) {
         if (j < intersectionSequence.length) {
             const nextIntersectionId = intersectionSequence[j].intersectionId;
             addEdge(ix.id, nextIntersectionId);
+        }
+        // Remove original edge between the nodes on either side
+        if (j > 0 && j < intersectionSequence.length) {
+            const prevIntersectionId = intersectionSequence[j - 1].intersectionId;
+            const nextIntersectionId = intersectionSequence[j].intersectionId;
+            removeEdge(prevIntersectionId, nextIntersectionId);
         }
     }
     state.intersections = state.intersections.concat(newIntersections);
@@ -154,7 +159,6 @@ function p5_mouse_released(p) {
         newCycles = newCycles.concat(detectCycles(state.graph, ix.id));
     }
     newCycles = dedupeCycles(newCycles);
-    console.log("cycles after dedupe:");
     for (const cycle of newCycles) {
         console.log(cycle);
     }
@@ -167,7 +171,13 @@ function p5_mouse_released(p) {
 function addEdge(from, to) {
     state.graph.push({ from, to });
     state.debugGraph.addEdge({ from, to });
-    console.log("debugGraph: ", state.debugGraph);
+}
+function removeEdge(from, to) {
+    function match(edge) {
+        return edge.from == from && edge.to == to || edge.to == from && edge.from == to;
+    }
+    state.graph = state.graph.filter(x => !match(x));
+    state.debugGraph.removeEdge({ from, to });
 }
 function sortedIntersectionsOnSegment(segmentId) {
     // Returns all intersections that lie on the given segment, sorted by increasing t-value.
@@ -181,7 +191,17 @@ function sortedIntersectionsOnSegment(segmentId) {
             ixs.push({ intersectionId: ix.id, t: ix.t2 });
         }
     }
-    return ixs.sort(x => x.t);
+    return ixs.sort((x, y) => {
+        if (x.t < y.t) {
+            return -1;
+        }
+        else if (x.t === y.t) {
+            return 0;
+        }
+        else {
+            return 1;
+        }
+    });
 }
 const s = (p) => {
     p.setup = () => p5_setup(p);
