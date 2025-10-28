@@ -39,12 +39,10 @@ export class Graph {
             // Apply force towards center
             const distance = vec_magnitude(nodeList[i].position);
             forces[i] = vec_add(forces[i], vec_mul(nodeList[i].position, -this.gravity / Math.pow(distance, 2)));
-            console.log(`force from gravity on node ${i}: ${vec_magnitude(forces[i])}`);
             // Apply repulsive force between nodes
             for (let j = i + 1; j < nodeList.length; j++) {
                 const dir = vec_sub(nodeList[j].position, nodeList[i].position);
                 const force = vec_mul(dir, this.repulsion / Math.pow(vec_magnitude(dir), 2));
-                console.log(`force from repulsion between nodes ${i} and ${j}: ${vec_magnitude(force)}`);
                 forces[j] = vec_add(forces[j], force);
                 forces[i] = vec_sub(forces[i], force);
             }
@@ -60,7 +58,6 @@ export class Graph {
             forces[node1Index] = vec_sub(forces[node1Index], force);
             forces[node2Index] = vec_add(forces[node2Index], force);
         }
-        console.log(forces);
         // Apply old velocities to update positions, then forces to update the velocities
         for (let i = 0; i < nodeList.length; i++) {
             const nodeId = nodeList[i].id;
@@ -75,12 +72,17 @@ export class Graph {
     }
 }
 export function draw_graph(p, graph) {
+    p.stroke("black");
+    p.fill("white");
     for (const edge of graph.edges) {
         const from = graph.nodes.get(edge.from);
         const to = graph.nodes.get(edge.to);
         p.line(from.position.x, from.position.y, to.position.x, to.position.y);
     }
     for (const node of graph.nodes.values()) {
-        p.circle(node.position.x, node.position.y, 5);
+        p.fill("white");
+        p.circle(node.position.x, node.position.y, 10);
+        p.fill("black");
+        p.text(node.id, node.position.x - 10, node.position.y - 10);
     }
 }

@@ -94,6 +94,10 @@ function p5_draw(p: p5) {
     state.debugGraph.update(p.deltaTime);
 
     if (state.debug) {
+        // Draw divider
+        p.stroke("black");
+        p.line(p.width / 2, 0, p.width / 2, p.height);
+
         // Draw graph edges. These should overlay the cuts but not extend beyond the intersections.
         p.stroke("white");
         p.strokeWeight(2);
@@ -119,7 +123,7 @@ function p5_draw(p: p5) {
         }
 
         // Draw clearer view of underlying graph
-        p.translate(p.width / 2, p.height / 2);
+        p.translate(3 * p.width / 4, p.height / 2);
         draw_graph(p, state.debugGraph);
     }
 }
