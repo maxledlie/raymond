@@ -1,6 +1,7 @@
 import { Graph, draw_graph } from "./graph.js";
 
-import { Vector, Mat2, vec_add, vec_sub, vec_div, vec_mul, vec_magnitude, mat_inverse, mat_mul_vec } from "./math.js";
+import { Vector, Mat2, vec_add, vec_sub, vec_div, vec_mul, vec_magnitude, mat_inverse, mat_mul_vec, vec_normalize } from "./math.js";
+import Interval from "./interval.js";
 
 // Represents a mathematical infinite line, defined by its gradient and y-intercept.
 // For vertical lines, the y-intercept is Infinity, and the y-intercept stores the x-coordinate instead.
@@ -13,6 +14,11 @@ interface LineSegment {
     id: number;
     start: Vector;
     end: Vector;
+}
+
+interface Ray {
+    start: Vector;
+    direction: Vector;
 }
 
 // Represents an intersection between two line segments.
@@ -76,11 +82,6 @@ function p5_draw(p: p5) {
         p.line(segment.start.x, segment.start.y, segment.end.x, segment.end.y);
     }
 
-    // Draw the currently dragged segment
-    if (state.draggedLineStart) {
-        p.line(state.draggedLineStart.x, state.draggedLineStart.y, p.mouseX, p.mouseY);
-    }
-
     // Draw holes
     p.fill("black");
     for (const hole of state.holes) {
@@ -89,6 +90,50 @@ function p5_draw(p: p5) {
             p.vertex(vertex.x, vertex.y);
         }
         p.endShape();
+    }
+
+    // Draw the currently dragged segment
+    if (state.draggedLineStart) {
+        const draggedSegment: LineSegment = {
+            id: state.segments.length,
+            start: state.draggedLineStart,
+            end: p.createVector(p.mouseX, p.mouseY)
+        };
+
+        p.line(state.draggedLineStart.x, state.draggedLineStart.y, p.mouseX, p.mouseY);
+
+        // DEBUG: Cast a ray along the cut and, for each polygon, find the t-intervals during which the ray is inside that polygon
+        const ray = {
+            start: state.draggedLineStart,
+            direction: vec_normalize(vec_sub({ x: p.mouseX, y: p.mouseY }, state.draggedLineStart))
+        };
+        let holeIntervals: Interval[] = [];
+        for (const hole of state.holes) {
+            const thisHoleIntervals = [];
+            const ts = rayPolygonIntersection(ray, hole).map(x => x.t1).sort();
+
+            console.log("ts: ", ts);
+
+            const startIndex = ts.length % 2;
+            if (startIndex == 1) {
+                // Ray starts inside this hole
+                thisHoleIntervals.push({ start: 0, end: ts[0] });
+            }
+            for (let i = startIndex; i < ts.length; i += 2) {
+                thisHoleIntervals.push({ start: ts[i], end: ts[i + 1] });
+            }
+            holeIntervals = holeIntervals.concat(thisHoleIntervals);
+        }
+        const domain: Interval = { start: 0, end: segmentLength(draggedSegment) };
+        const landIntervals = Interval.complement(holeIntervals, domain);
+
+        p.stroke("white");
+        p.strokeWeight(5);
+        for (const iv of landIntervals) {
+            const start = pointOnRay(ray, iv.start);
+            const end = pointOnRay(ray, iv.end);
+            p.line(start.x, start.y, end.x, end.y);
+        }
     }
 
     state.debugGraph.update(p.deltaTime);
@@ -168,11 +213,12 @@ function p5_mouse_released(p: p5) {
         }
     }
 
+
     // Check for intersections with existing line segments
     const newIntersections: Intersection[] = [];
     for (let iSegment = 0; iSegment < state.segments.length; iSegment++) {
         const segment = state.segments[iSegment];
-        const ix = segmentIntersection(newSegment, segment);
+        const ix = segmentSegmentIntersection(newSegment, segment);
         if (ix) {
             newIntersections.push({ ...ix, id: state.intersections.length + newIntersections.length });
         }
@@ -221,9 +267,9 @@ function p5_mouse_released(p: p5) {
 
     state.intersections = state.intersections.concat(newIntersections);
 
-    // Find new cycles created by adding this segment. This will contain duplicates which we remove
-    // to dampen the combinatorial explosion.
     if (newIntersections.length > 1) {
+        // Find new cycles created by adding this segment. This will contain duplicates which we remove
+        // to dampen the combinatorial explosion.
         let newCycles: number[][] = [];
         for (const ix of newIntersections) {
             newCycles = newCycles.concat(detectCycles(state.graph, ix.id));
@@ -329,7 +375,7 @@ function dedupeCycles(cycles: number[][]): number[][] {
     return [...seen.values()];
 }
 
-function segmentIntersection(segment1: LineSegment, segment2: LineSegment): Omit<Intersection, "id"> | null {
+function segmentSegmentIntersection(segment1: LineSegment, segment2: LineSegment): Omit<Intersection, "id"> | null {
     // Given two line segments:
     // - Returns the point of intersection if they intersect
     // - Returns null if they have no intersection or infinitely many intersection points (parallel and overlapping)
@@ -370,6 +416,57 @@ function segmentIntersection(segment1: LineSegment, segment2: LineSegment): Omit
         t1,
         t2
     }
+}
+
+function segmentPolygonIntersection(segment: LineSegment, polygon: Polygon): Omit<Intersection, "id">[] {
+    const ret = [];
+
+    // Construct segments for each edge of the polygon
+    const polygonSegments: LineSegment[] = [];
+    for (let i = 0; i < polygon.length - 1; i++) {
+        polygonSegments.push({
+            id: -1,
+            start: polygon[i],
+            end: polygon[i+1]
+        });
+    }
+    polygonSegments.push({
+        id: -1,
+        start: polygon[polygon.length - 1],
+        end: polygon[0]
+    });
+
+    for (const polygonSegment of polygonSegments) {
+        const ix = segmentSegmentIntersection(segment, polygonSegment);
+        if (ix) {
+            ret.push(ix);
+        }
+    }
+    return ret;
+}
+
+function rayPolygonIntersection(ray: Ray, polygon: Polygon): Omit<Intersection, "id">[] {
+    // Construct a very long segment representing the ray.
+    const raySegment = {
+        id: -1,
+        start: ray.start,
+        end: vec_add(ray.start, vec_mul(ray.direction, 10000))
+    }
+    return segmentPolygonIntersection(raySegment, polygon);
+}
+
+function pointOnRay(ray: Ray, t: number) {
+    return vec_add(ray.start, vec_mul(ray.direction, t));
+}
+
+function isPointInsidePolygon(point: Vector, polygon: Polygon) {
+    const testRay = {
+        id: -1,
+        start: point,
+        end: { id: -1, x: point.x + 1000000, y: point.y }
+    };
+    const intersections = segmentPolygonIntersection(testRay, polygon);
+    return intersections.length % 2 === 1;
 }
 
 function lineContainingSegment(segment: LineSegment): Line {
