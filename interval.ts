@@ -47,7 +47,17 @@ export default class Interval {
         const complement = [];
         
         let prevEnd = domain.start;
-        for (const { start, end } of merged) {
+        for (let { start, end } of merged) {
+            if (end <= domain.start) {
+                continue;  // Completely to the left of domain
+            }
+            if (start >= domain.end) {
+                break;  // Completely to the right of domain
+            }
+
+            start = Math.max(start, domain.start);
+            end = Math.min(end, domain.end);
+
             if (start > prevEnd) {
                 complement.push({ start: prevEnd, end: start });
             }

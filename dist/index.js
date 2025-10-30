@@ -38,11 +38,12 @@ function p5_draw(p) {
     }
     // Draw the currently dragged segment
     if (state.draggedLineStart) {
-        const draggedSegment = {
+        const cutSegment = {
             id: state.segments.length,
             start: state.draggedLineStart,
             end: p.createVector(p.mouseX, p.mouseY)
         };
+        const cutLength = segmentLength(cutSegment);
         p.line(state.draggedLineStart.x, state.draggedLineStart.y, p.mouseX, p.mouseY);
         // DEBUG: Cast a ray along the cut and, for each polygon, find the t-intervals during which the ray is inside that polygon
         const ray = {
@@ -52,8 +53,7 @@ function p5_draw(p) {
         let holeIntervals = [];
         for (const hole of state.holes) {
             const thisHoleIntervals = [];
-            const ts = rayPolygonIntersection(ray, hole).map(x => x.t1).sort();
-            console.log("ts: ", ts);
+            const ts = rayPolygonIntersection(ray, hole).map(x => x.t1).sort((a, b) => a - b);
             const startIndex = ts.length % 2;
             if (startIndex == 1) {
                 // Ray starts inside this hole
@@ -64,8 +64,12 @@ function p5_draw(p) {
             }
             holeIntervals = holeIntervals.concat(thisHoleIntervals);
         }
-        const domain = { start: 0, end: segmentLength(draggedSegment) };
+        holeIntervals.sort((a, b) => a.start - b.start);
+        holeIntervals = Interval.union(holeIntervals);
+        console.log("holeIntervals: ", holeIntervals);
+        const domain = { start: 0, end: cutLength };
         const landIntervals = Interval.complement(holeIntervals, domain);
+        console.log("landIntervals: ", landIntervals);
         p.stroke("white");
         p.strokeWeight(5);
         for (const iv of landIntervals) {
