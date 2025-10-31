@@ -1,55 +1,48 @@
-import { Vector, Mat2, vec_add, vec_sub, vec_div, vec_mul, vec_magnitude, mat_inverse, mat_mul_vec } from "./math.js";
+import { Graph, draw_graph } from "./graph.js";
 
-// Represents a mathematical infinite line, defined by its gradient and y-intercept.
-// For vertical lines, the y-intercept is Infinity, and the y-intercept stores the x-coordinate instead.
-interface Line {
-    m: number;
-    c: number;
-}
+import { Vector, Mat2, vec_add, vec_sub, vec_div, vec_mul, vec_magnitude, mat_inverse, mat_mul_vec, vec_normalize } from "./math.js";
+import Interval from "./interval.js";
 
-interface LineSegment {
-    id: number;
+interface Ray {
     start: Vector;
-    end: Vector;
+    direction: Vector;
 }
 
-// Represents an intersection between two line segments.
-// Stores the indexes of the segments and the distance of the point along each of the lines.
-interface Intersection {
+interface Node {
     id: number;
     point: Vector;
-    segment1Id: number;
-    segment2Id: number;
-    t1: number;
-    t2: number;
 }
 
-// An edge on the graph of connected intersection points
 interface Edge {
     from: number;
     to: number;
 }
 
-type Polygon = Vector[];
+interface Intersection {
+    t: number;
+    edge: Edge
+}
+
+type Polygon = Edge[];
 
 // Config
 const MIN_SEGMENT_LENGTH = 10;
 
 interface State {
     debug: boolean;
-    segments: LineSegment[];
-    intersections: Intersection[];
+    nodes: Node[];
     draggedLineStart: Vector | null;
     holes: Polygon[];
     graph: Edge[];
+    debugGraph: Graph;
 }
 
 const state: State = {
-    debug: false,
-    segments: [],
-    intersections: [],
+    debug: true,
+    nodes: [],
     draggedLineStart: null,
     graph: [],
+    debugGraph: new Graph([], 50),
     holes: []
 };
 
@@ -67,56 +60,111 @@ function p5_draw(p: p5) {
     p.text("Draw lines and make shapes!\nOn desktop? Press space for debug mode.", 10, 20);
     p.strokeWeight(1);
 
-    // Draw saved segments
-    for (const segment of state.segments) {
-        p.line(segment.start.x, segment.start.y, segment.end.x, segment.end.y);
-    }
-
-    // Draw the currently dragged segment
-    if (state.draggedLineStart) {
-        p.line(state.draggedLineStart.x, state.draggedLineStart.y, p.mouseX, p.mouseY);
-    }
-
     // Draw holes
-    p.fill("black");
+    p.fill(163, 95, 0);
     for (const hole of state.holes) {
         p.beginShape();
-        for (const vertex of hole) {
-            p.vertex(vertex.x, vertex.y);
+        for (const edge of hole) {
+            const start = state.nodes[edge.from];
+            p.vertex(start.point.x, start.point.y);
         }
         p.endShape();
     }
 
-    if (state.debug) {
-        // Draw graph edges. These should overlay the cuts but not extend beyond the intersections.
-        p.stroke("white");
-        p.strokeWeight(2);
-        for (const edge of state.graph) {
-            const from = state.intersections[edge.from];
-            const to = state.intersections[edge.to];
-            p.line(from.point.x, from.point.y, to.point.x, to.point.y);
+    // Draw saved segments
+    console.log("state.graph: ", state.graph);
+    for (const edge of state.graph) {
+        const start = state.nodes[edge.from].point;
+        if (!state.nodes[edge.to]) {
+            console.log("Edge references missing node ", edge.to);
         }
+        const end = state.nodes[edge.to].point;
+        p.line(start.x, start.y, end.x, end.y);
+    }
+
+    const previewStrokeColor = p.color(0, 0, 0, 120);
+
+    // Draw the currently dragged segment
+    if (state.draggedLineStart) {
+        p.stroke(previewStrokeColor);
+        p.line(state.draggedLineStart.x, state.draggedLineStart.y, p.mouseX, p.mouseY);
+
+        // DEBUG: Cast a ray along the cut and, for each polygon, find the t-intervals during which the ray is inside that polygon
+        const cutStart = state.draggedLineStart;
+        const cutEnd = { x: p.mouseX, y: p.mouseY };
+        const cutRay = {
+            start: state.draggedLineStart,
+            direction: vec_normalize(vec_sub(cutEnd, cutStart))
+        };
+        let holeIntervals: Interval[] = [];
+        for (const hole of state.holes) {
+            const thisHoleIntervals = [];
+            const ts = rayIntersectPolygon(cutRay, hole).sort((a, b) => a - b);
+            const startIndex = ts.length % 2;
+            if (startIndex == 1) {
+                // Ray starts inside this hole
+                thisHoleIntervals.push({ start: 0, end: ts[0] });
+            }
+            for (let i = startIndex; i < ts.length; i += 2) {
+                thisHoleIntervals.push({ start: ts[i], end: ts[i + 1] });
+            }
+            holeIntervals = holeIntervals.concat(thisHoleIntervals);
+        }
+        holeIntervals.sort((a, b) => a.start - b.start);
+        holeIntervals = Interval.union(holeIntervals);
+        const domain: Interval = { start: 0, end: vec_magnitude(vec_sub(cutEnd, cutStart)) };
+        const landIntervals = Interval.complement(holeIntervals, domain);
+
+        for (const iv of landIntervals) {
+            const start = pointOnRay(cutRay, iv.start);
+            const end = pointOnRay(cutRay, iv.end);
+            p.line(start.x, start.y, end.x, end.y);
+        }
+
+        // Draw preview nodes
+        if (state.debug) {
+            const intersections = cutIntersectWorld(cutStart, cutEnd, state.graph, state.holes);
+            p.fill(p.color(255, 0, 0, 120));
+            for (const ix of intersections) {
+                const point = pointOnRay(cutRay, ix.t);
+                p.circle(point.x, point.y, 10);
+            }
+            p.circle(cutStart.x, cutStart.y, 10);
+            p.circle(cutEnd.x, cutEnd.y, 10);
+        }
+    }
+
+
+    state.debugGraph.update(p.deltaTime);
+
+    if (state.debug) {
+        // Draw divider
+        p.stroke("black");
+        p.line(p.width / 2, 0, p.width / 2, p.height);
 
         // Draw intersections
         p.stroke("black");
         p.strokeWeight(1);
         p.fill("red");
-        for (const ix of state.intersections) {
+        for (const ix of state.nodes) {
             p.circle(ix.point.x, ix.point.y, 10);
         }
 
         p.fill("green");
         p.stroke("green");
         p.textSize(16);
-        for (const ix of state.intersections) {
+        for (const ix of state.nodes) {
             p.text(ix.id, ix.point.x - 12, ix.point.y - 6);
         }
-    }
 
+        // Draw clearer view of underlying graph
+        p.translate(3 * p.width / 4, p.height / 2);
+        draw_graph(p, state.debugGraph);
+    }
 }
 
 function p5_mouse_pressed(p: p5) {
-    state.draggedLineStart = p.createVector(p.mouseX, p.mouseY);
+    state.draggedLineStart = { x: p.mouseX, y: p.mouseY };
 }
 
 function p5_key_pressed(p: p5) {
@@ -126,118 +174,77 @@ function p5_key_pressed(p: p5) {
 }
 
 function p5_mouse_released(p: p5) {
-    const newSegment: LineSegment = {
-        id: state.segments.length,
+    const cutStart = state.draggedLineStart;
+    const cutEnd = { x: p.mouseX, y: p.mouseY }
+    const cutVec = vec_sub(cutEnd, state.draggedLineStart);
+    const cutLength = vec_magnitude(cutVec);
+    const cutRay: Ray = {
         start: state.draggedLineStart,
-        end: p.createVector(p.mouseX, p.mouseY)
+        direction: vec_div(cutVec, cutLength)
     };
     state.draggedLineStart = null;
-    if (segmentLength(newSegment) < MIN_SEGMENT_LENGTH) {
+    if (cutLength < MIN_SEGMENT_LENGTH) {
         return false;
     }
 
-    // As a debugging aid, if SHIFT is held, snap lines to horizontal or vertical if they are close enough
-    if (p.keyIsDown(p.SHIFT)) {
-        const rawLine = lineContainingSegment(newSegment);
-        if (Math.abs(rawLine.m) > 50) {
-            const sign = newSegment.end.y > newSegment.start.y ? 1 : -1;
-            newSegment.end = {
-                x: newSegment.start.x,
-                y: newSegment.start.y + sign * segmentLength(newSegment)
-            };
-        }
-        if (Math.abs(rawLine.m) < 1 / 50) {
-            const sign = newSegment.end.x > newSegment.start.x ? 1 : -1;
-            newSegment.end = {
-                x: newSegment.start.x + sign * segmentLength(newSegment),
-                y: newSegment.start.y
-            };
-        }
+    const intersections = cutIntersectWorld(cutStart, cutEnd, state.graph, state.holes);
+
+    // For each intersection with a segment, remove the edge between the endpoints and connect each endpoint
+    // to the new midpoint instead.
+    const newNodes: Node[] = [{ id: state.nodes.length, point: cutRay.start }];
+    for (const ix of intersections) {
+        const newNodeId = state.nodes.length + newNodes.length;
+        newNodes.push({
+            id: newNodeId,
+            point: pointOnRay(cutRay, ix.t)
+        });
+        removeEdge(ix.edge.from, ix.edge.to);
+        addEdge(ix.edge.from, newNodeId);
+        addEdge(newNodeId, ix.edge.to);
+    }
+    newNodes.push({ id: state.nodes.length + newNodes.length, point: { x: p.mouseX, y: p.mouseY }});
+    console.log("newNodes: ", newNodes);
+
+    // Create graph edges between the newly created nodes.
+    // They are already sorted at this point.
+    for (let i = 0; i < newNodes.length - 1; i++) {
+        addEdge(newNodes[i].id, newNodes[i + 1].id);
     }
 
-    // Check for intersections with existing line segments
-    const newIntersections: Intersection[] = [];
-    for (let iSegment = 0; iSegment < state.segments.length; iSegment++) {
-        const segment = state.segments[iSegment];
-        const ix = segmentIntersection(newSegment, segment);
-        if (ix) {
-            newIntersections.push({ ...ix, id: state.intersections.length + newIntersections.length });
+    state.nodes = state.nodes.concat(newNodes);
+
+    if (newNodes.length > 1) {
+        // Find new cycles created by adding this segment. This will contain duplicates which we remove
+        // to dampen the combinatorial explosion.
+        let newCycles: number[][] = [];
+        for (const ix of newNodes) {
+            newCycles = newCycles.concat(detectCycles(state.graph, ix.id));
         }
-    }
 
-    // Create graph edges between the newly created intersections.
-    // We *could* create an edge for every pair of new intersections.
-    // But that would make the graph bigger and slow down the cycle search.
-    // So we sort the intersections by distance along the new segment and only connect sequential intersections.
-    const sorted = newIntersections.sort((ix) => ix.t1);
-    for (let i = 0; i < sorted.length - 1; i++) {
-        state.graph.push({ from: sorted[i].id, to: sorted[i + 1].id });
-    }
+        newCycles = dedupeCycles(newCycles);
 
-    // Each newly created intersection, ix, connects the new segment, A, to some other segment, B.
-    // We need to add edges to the graph connecting ix to the closest existing intersections to either side on B.
-    // NOTE: The current implementation *keeps* the graph edge between these closest existing intersections,
-    // making the graph a little more complex than necessary but keeping the edge list append-only.
-    for (const ix of newIntersections) {
-        const oldSegmentId = ix.segment2Id;
-        const intersectionSequence = sortedIntersectionsOnSegment(oldSegmentId);
-
-        // Find index where new intersection would sit if inserted in the intersection sequence, maintaining sort order
-        let j = 0;
-        for (let i = 0; i < intersectionSequence.length; i++) {
-            if (intersectionSequence[i].t > ix.t2) {
-                j = i;
-                break;
+        for (const cycle of newCycles) {
+            const holeEdges: Edge[] = [];
+            for (let i = 0; i < cycle.length - 1; i++) {
+                holeEdges.push({ from: cycle[i], to: cycle[i + 1] });
             }
-        }
-        if (j > 0) {
-            const prevIntersectionId = intersectionSequence[j - 1].intersectionId;
-            state.graph.push({ from: prevIntersectionId, to: ix.id });
-        }
-        if (j < intersectionSequence.length) {
-            const nextIntersectionId = intersectionSequence[j].intersectionId;
-            state.graph.push({ from: ix.id, to: nextIntersectionId });
+            holeEdges.push({ from: cycle[cycle.length - 1], to: cycle[0] });
+            state.holes.push(holeEdges);
         }
     }
-
-    state.intersections = state.intersections.concat(newIntersections);
-
-    // Find new cycles created by adding this segment. This will contain duplicates which we remove
-    // to dampen the combinatorial explosion.
-    let newCycles: number[][] = [];
-    for (const ix of newIntersections) {
-        newCycles = newCycles.concat(detectCycles(state.graph, ix.id));
-    }
-
-    newCycles = dedupeCycles(newCycles);
-
-    console.log("cycles after dedupe:");
-    for (const cycle of newCycles) {
-        console.log(cycle);
-    }
-
-    for (const cycle of newCycles) {
-        state.holes.push(cycle.map(x => ({ x: state.intersections[x].point.x, y: state.intersections[x].point.y })));
-    }
-
-    state.segments.push(newSegment);
-
-    console.log("num holes: ", state.holes.length);
 }
 
-function sortedIntersectionsOnSegment(segmentId: number): { intersectionId: number; t: number; }[] {
-    // Returns all intersections that lie on the given segment, sorted by increasing t-value.
-    // OPT: I expect this function will take up the bulk of calculation time. Could optimise with some hash tables or something.
-    const ixs = [];
-    for (const ix of state.intersections) {
-        if (ix.segment1Id == segmentId) {
-            ixs.push({ intersectionId: ix.id, t: ix.t1 });
-        }
-        if (ix.segment2Id == segmentId) {
-            ixs.push({ intersectionId: ix.id, t: ix.t2 });
-        }
+function addEdge(from: number, to: number) {
+    state.graph.push({ from, to });
+    state.debugGraph.addEdge({ from, to });
+}
+
+function removeEdge(from: number, to: number) {
+    function match(edge: Edge): boolean {
+        return edge.from == from && edge.to == to || edge.to == from && edge.from == to;
     }
-    return ixs.sort(x => x.t);
+    state.graph = state.graph.filter(x => !match(x));
+    state.debugGraph.removeEdge({ from, to });
 }
 
 const s = (p: p5) => {
@@ -280,7 +287,6 @@ function canonicalizeCycle(cycle: number[]): string {
     return rotated < reverse ? forward_str : reverse_str;
 }
 
-
 /**
  * Remove duplicate cycles.
  */
@@ -295,18 +301,36 @@ function dedupeCycles(cycles: number[][]): number[][] {
     return [...seen.values()];
 }
 
-function segmentIntersection(segment1: LineSegment, segment2: LineSegment): Omit<Intersection, "id"> | null {
-    // Given two line segments:
-    // - Returns the point of intersection if they intersect
-    // - Returns null if they have no intersection or infinitely many intersection points (parallel and overlapping)
+function cutIntersectWorld(cutStart: Vector, cutEnd: Vector, edges: Edge[], holes: Polygon[]): Intersection[] {
+    const cutVec = vec_sub(cutEnd, cutStart);
+    const cutLength = vec_magnitude(cutVec);
+    const cutRay: Ray = {
+        start: cutStart,
+        direction: vec_div(cutVec, cutLength)
+    };
 
-    const x1: Vector = segment1.start;
-    const x2: Vector = segment2.start;
-    const d1: Vector = vec_sub(segment1.end, segment1.start);
-    const d2: Vector = vec_sub(segment2.end, segment2.start);
-    const length1 = vec_magnitude(d1);
+    // Find all intersections with existing edges and sort in order of increasing distance from ray origin
+    const intersections: Intersection[] = [];
+    for (const edge of state.graph) {
+        const t = rayIntersectEdge(cutRay, edge, state.nodes);
+        if (t != null && 0 <= t && t <= cutLength) {
+            intersections.push({ t, edge })
+        }
+    }
+    intersections.sort((a, b) => a.t - b.t);
+    return intersections;
+}
+
+function rayIntersectEdge(ray: Ray, edge: Edge, nodes: Node[]): number | null {
+    // Given a ray and a line segment defined by its start and end,
+    // returns the t-value of intersection if it exists, else null.
+    // The t-value is returned even if negative.
+    const x1: Vector = ray.start;
+    const x2: Vector = nodes[edge.from].point;
+    const d1: Vector = vec_normalize(ray.direction);
+    const d2: Vector = vec_sub(nodes[edge.to].point, nodes[edge.from].point);
     const length2 = vec_magnitude(d2);
-    const v1: Vector = vec_div(d1, length1);
+    const v1: Vector = d1;
     const v2: Vector = vec_div(d2, length2);
 
     // t stores the distance of the point of intersection from the start of each line segment.
@@ -324,32 +348,28 @@ function segmentIntersection(segment1: LineSegment, segment2: LineSegment): Omit
     const delta = vec_sub(x2, x1);
     const { x: t1, y: t2 } = mat_mul_vec(m_inv, delta);
 
-    if (t1 < 0 || t1 > length1 || t2 < 0 || t2 > length2) {
+    // No intersection if we miss the segment
+    if (t2 < 0 || t2 > length2) {
         return null;
     }
 
-    const point = vec_add(x1, vec_mul(v1, t1));
-    return {
-        point,
-        segment1Id: segment1.id,
-        segment2Id: segment2.id,
-        t1,
-        t2
-    }
+    return t1;
 }
 
-function lineContainingSegment(segment: LineSegment): Line {
-    // Find gradient and y-intercept of the infinite line containing the segment.
-    if (segment.start.x == segment.end.x) {
-        return { m: Infinity, c: segment.start.x };
+function rayIntersectPolygon(ray: Ray, polygon: Polygon): number[] {
+    const ret = [];
+
+    for (const edge of polygon) {
+        const t = rayIntersectEdge(ray, edge, state.nodes);
+        if (t) {
+            ret.push(t);
+        }
     }
-    const m = (segment.end.y - segment.start.y) / (segment.end.x - segment.start.x);
-    const c = segment.start.y - m * segment.start.x;
-    return { m, c };
+    return ret;
 }
 
-function segmentLength(segment: LineSegment): number {
-    return vec_magnitude(vec_sub(segment.end, segment.start));
+function pointOnRay(ray: Ray, t: number): Vector {
+    return vec_add(ray.start, vec_mul(ray.direction, t));
 }
 
 function detectCycles(graph: Edge[], root: number): number[][] {
