@@ -72,12 +72,8 @@ function p5_draw(p: p5) {
     }
 
     // Draw saved segments
-    console.log("state.graph: ", state.graph);
     for (const edge of state.graph) {
         const start = state.nodes[edge.from].point;
-        if (!state.nodes[edge.to]) {
-            console.log("Edge references missing node ", edge.to);
-        }
         const end = state.nodes[edge.to].point;
         p.line(start.x, start.y, end.x, end.y);
     }
@@ -123,7 +119,7 @@ function p5_draw(p: p5) {
 
         // Draw preview nodes
         if (state.debug) {
-            const intersections = cutIntersectWorld(cutStart, cutEnd, state.graph, state.holes);
+            const intersections = cutIntersectWorld(state, cutStart, cutEnd);
             p.fill(p.color(255, 0, 0, 120));
             for (const ix of intersections) {
                 const point = pointOnRay(cutRay, ix.t);
@@ -187,7 +183,7 @@ function p5_mouse_released(p: p5) {
         return false;
     }
 
-    const intersections = cutIntersectWorld(cutStart, cutEnd, state.graph, state.holes);
+    const intersections = cutIntersectWorld(state, cutStart, cutEnd);
 
     // For each intersection with a segment, remove the edge between the endpoints and connect each endpoint
     // to the new midpoint instead.
@@ -203,12 +199,26 @@ function p5_mouse_released(p: p5) {
         addEdge(newNodeId, ix.edge.to);
     }
     newNodes.push({ id: state.nodes.length + newNodes.length, point: { x: p.mouseX, y: p.mouseY }});
-    console.log("newNodes: ", newNodes);
 
-    // Create graph edges between the newly created nodes.
+    // Create graph edges between the newly created nodes, but only if the centre of each edge is not in a polygon!
     // They are already sorted at this point.
     for (let i = 0; i < newNodes.length - 1; i++) {
-        addEdge(newNodes[i].id, newNodes[i + 1].id);
+        const start = newNodes[i];
+        const end = newNodes[i + 1];
+        const midPoint = vec_mul(vec_add(start.point, end.point), 0.5);
+        console.log("midPoint: ", midPoint);
+
+        let inHole = false;
+        for (const hole of state.holes) {
+            console.log("hole: ", hole);
+            if (isPointInPolygon(midPoint, hole)) {
+                inHole = true;
+                break;
+            }
+        }
+        if (!inHole) {
+            addEdge(newNodes[i].id, newNodes[i + 1].id);
+        }
     }
 
     state.nodes = state.nodes.concat(newNodes);
@@ -232,6 +242,15 @@ function p5_mouse_released(p: p5) {
             state.holes.push(holeEdges);
         }
     }
+}
+
+function isPointInPolygon(point: Vector, polygon: Polygon) {
+    const ray: Ray = {
+        start: point,
+        direction: { x: 1, y: 0 }
+    }
+    const intersections = rayIntersectPolygon(ray, polygon).filter(x => x >= 0);
+    return intersections.length % 2 === 1;
 }
 
 function addEdge(from: number, to: number) {
@@ -301,7 +320,7 @@ function dedupeCycles(cycles: number[][]): number[][] {
     return [...seen.values()];
 }
 
-function cutIntersectWorld(cutStart: Vector, cutEnd: Vector, edges: Edge[], holes: Polygon[]): Intersection[] {
+function cutIntersectWorld(state: State, cutStart: Vector, cutEnd: Vector): Intersection[] {
     const cutVec = vec_sub(cutEnd, cutStart);
     const cutLength = vec_magnitude(cutVec);
     const cutRay: Ray = {
@@ -309,7 +328,8 @@ function cutIntersectWorld(cutStart: Vector, cutEnd: Vector, edges: Edge[], hole
         direction: vec_div(cutVec, cutLength)
     };
 
-    // Find all intersections with existing edges and sort in order of increasing distance from ray origin
+    // Find all intersections with existing edges and sort in order of increasing distance from ray origin.
+    // Edges inside 
     const intersections: Intersection[] = [];
     for (const edge of state.graph) {
         const t = rayIntersectEdge(cutRay, edge, state.nodes);
