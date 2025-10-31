@@ -3,12 +3,6 @@ import { Graph, draw_graph } from "./graph.js";
 import { Vector, Mat2, vec_add, vec_sub, vec_div, vec_mul, vec_magnitude, mat_inverse, mat_mul_vec, vec_normalize } from "./math.js";
 import Interval from "./interval.js";
 
-interface LineSegment {
-    id: number;
-    start: Vector;
-    end: Vector;
-}
-
 interface Ray {
     start: Vector;
     direction: Vector;
@@ -29,7 +23,7 @@ interface Intersection {
     edge: Edge
 }
 
-type Polygon = Vector[];
+type Polygon = Edge[];
 
 // Config
 const MIN_SEGMENT_LENGTH = 10;
@@ -77,8 +71,9 @@ function p5_draw(p: p5) {
     p.fill("black");
     for (const hole of state.holes) {
         p.beginShape();
-        for (const vertex of hole) {
-            p.vertex(vertex.x, vertex.y);
+        for (const edge of hole) {
+            const start = state.nodes[edge.from];
+            p.vertex(start.point.x, start.point.y);
         }
         p.endShape();
     }
@@ -87,39 +82,41 @@ function p5_draw(p: p5) {
     if (state.draggedLineStart) {
         p.line(state.draggedLineStart.x, state.draggedLineStart.y, p.mouseX, p.mouseY);
 
-        // // DEBUG: Cast a ray along the cut and, for each polygon, find the t-intervals during which the ray is inside that polygon
-        // const ray = {
-        //     start: state.draggedLineStart,
-        //     direction: vec_normalize(vec_sub({ x: p.mouseX, y: p.mouseY }, state.draggedLineStart))
-        // };
-        // let holeIntervals: Interval[] = [];
-        // for (const hole of state.holes) {
-        //     const thisHoleIntervals = [];
-        //     const ts = rayIntersectPolygon(ray, hole).sort((a, b) => a - b);
-        //     const startIndex = ts.length % 2;
-        //     if (startIndex == 1) {
-        //         // Ray starts inside this hole
-        //         thisHoleIntervals.push({ start: 0, end: ts[0] });
-        //     }
-        //     for (let i = startIndex; i < ts.length; i += 2) {
-        //         thisHoleIntervals.push({ start: ts[i], end: ts[i + 1] });
-        //     }
-        //     holeIntervals = holeIntervals.concat(thisHoleIntervals);
-        // }
-        // holeIntervals.sort((a, b) => a.start - b.start);
-        // holeIntervals = Interval.union(holeIntervals);
-        // console.log("holeIntervals: ", holeIntervals);
-        // const domain: Interval = { start: 0, end: cutLength };
-        // const landIntervals = Interval.complement(holeIntervals, domain);
-        // console.log("landIntervals: ", landIntervals);
+        // DEBUG: Cast a ray along the cut and, for each polygon, find the t-intervals during which the ray is inside that polygon
+        const cutStart = state.draggedLineStart;
+        const cutEnd = { x: p.mouseX, y: p.mouseY };
+        const ray = {
+            start: state.draggedLineStart,
+            direction: vec_normalize(vec_sub(cutEnd, cutStart))
+        };
+        let holeIntervals: Interval[] = [];
+        for (const hole of state.holes) {
+            const thisHoleIntervals = [];
+            const ts = rayIntersectPolygon(ray, hole).sort((a, b) => a - b);
+            const startIndex = ts.length % 2;
+            if (startIndex == 1) {
+                // Ray starts inside this hole
+                thisHoleIntervals.push({ start: 0, end: ts[0] });
+            }
+            for (let i = startIndex; i < ts.length; i += 2) {
+                thisHoleIntervals.push({ start: ts[i], end: ts[i + 1] });
+            }
+            holeIntervals = holeIntervals.concat(thisHoleIntervals);
+        }
+        holeIntervals.sort((a, b) => a.start - b.start);
+        holeIntervals = Interval.union(holeIntervals);
+        console.log("holeIntervals: ", holeIntervals);
+        const domain: Interval = { start: 0, end: vec_magnitude(vec_sub(cutEnd, cutStart)) };
+        const landIntervals = Interval.complement(holeIntervals, domain);
+        console.log("landIntervals: ", landIntervals);
 
-        // p.stroke("white");
-        // p.strokeWeight(5);
-        // for (const iv of landIntervals) {
-        //     const start = pointOnRay(ray, iv.start);
-        //     const end = pointOnRay(ray, iv.end);
-        //     p.line(start.x, start.y, end.x, end.y);
-        // }
+        p.stroke("white");
+        p.strokeWeight(5);
+        for (const iv of landIntervals) {
+            const start = pointOnRay(ray, iv.start);
+            const end = pointOnRay(ray, iv.end);
+            p.line(start.x, start.y, end.x, end.y);
+        }
     }
 
     state.debugGraph.update(p.deltaTime);
@@ -227,7 +224,12 @@ function p5_mouse_released(p: p5) {
         newCycles = dedupeCycles(newCycles);
 
         for (const cycle of newCycles) {
-            state.holes.push(cycle.map(x => ({ x: state.nodes[x].point.x, y: state.nodes[x].point.y })));
+            const holeEdges: Edge[] = [];
+            for (let i = 0; i < cycle.length - 1; i++) {
+                holeEdges.push({ from: cycle[i], to: cycle[i + 1] });
+            }
+            holeEdges.push({ from: cycle[cycle.length - 1], to: cycle[0] });
+            state.holes.push(holeEdges);
         }
     }
 }
@@ -337,32 +339,17 @@ function rayIntersectEdge(ray: Ray, edge: Edge, nodes: Node[]): number | null {
     return t1;
 }
 
-// function rayIntersectPolygon(ray: Ray, polygon: Polygon): number[] {
-//     const ret = [];
-// 
-//     // Construct segments for each edge of the polygon
-//     const polygonSegments: LineSegment[] = [];
-//     for (let i = 0; i < polygon.length - 1; i++) {
-//         polygonSegments.push({
-//             id: -1,
-//             start: polygon[i],
-//             end: polygon[i+1]
-//         });
-//     }
-//     polygonSegments.push({
-//         id: -1,
-//         start: polygon[polygon.length - 1],
-//         end: polygon[0]
-//     });
-// 
-//     for (const polygonSegment of polygonSegments) {
-//         const t = rayIntersectEdge(ray, polygonSegment.start, polygonSegment.end);
-//         if (t) {
-//             ret.push(t);
-//         }
-//     }
-//     return ret;
-// }
+function rayIntersectPolygon(ray: Ray, polygon: Polygon): number[] {
+    const ret = [];
+
+    for (const edge of polygon) {
+        const t = rayIntersectEdge(ray, edge, state.nodes);
+        if (t) {
+            ret.push(t);
+        }
+    }
+    return ret;
+}
 
 function pointOnRay(ray: Ray, t: number): Vector {
     return vec_add(ray.start, vec_mul(ray.direction, t));
