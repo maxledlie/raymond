@@ -4,7 +4,7 @@ import Interval from "./interval.js";
 // Config
 const MIN_SEGMENT_LENGTH = 10;
 const state = {
-    debug: true,
+    debug: false,
     nodes: [],
     draggedLineStart: null,
     graph: [],
@@ -23,7 +23,12 @@ function p5_draw(p) {
     p.text("Draw lines and make shapes!\nOn desktop? Press space for debug mode.", 10, 20);
     p.strokeWeight(1);
     // Draw holes
-    p.fill(163, 95, 0);
+    if (state.debug) {
+        p.fill(163, 95, 0);
+    }
+    else {
+        p.fill("black");
+    }
     for (const hole of state.holes) {
         p.beginShape();
         for (const edge of hole) {

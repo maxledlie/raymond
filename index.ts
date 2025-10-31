@@ -38,7 +38,7 @@ interface State {
 }
 
 const state: State = {
-    debug: true,
+    debug: false,
     nodes: [],
     draggedLineStart: null,
     graph: [],
@@ -61,7 +61,11 @@ function p5_draw(p: p5) {
     p.strokeWeight(1);
 
     // Draw holes
-    p.fill(163, 95, 0);
+    if (state.debug) {
+        p.fill(163, 95, 0);
+    } else {
+        p.fill("black");
+    }
     for (const hole of state.holes) {
         p.beginShape();
         for (const edge of hole) {
