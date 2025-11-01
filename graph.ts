@@ -48,9 +48,8 @@ export class Graph {
     }
 
     removeEdge(edge: Edge) {
-        console.log("removing edge: ", edge);
         function match(e: Edge): boolean {
-            return e.from == edge.from && e.to == edge.to || e.to == edge.from && e.from == edge.to;
+            return e.from == edge.from && e.to == edge.to;
         }
         this.edges = this.edges.filter(x => !match(x));
         this.computeBiconnectedComponents();

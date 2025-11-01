@@ -196,12 +196,13 @@ function isPointInPolygon(point, polygon) {
     return intersections.length % 2 === 1;
 }
 function addEdge(from, to) {
-    state.graph.push({ from, to });
-    state.debugGraph.addEdge({ from, to });
+    const edge = { from: Math.min(from, to), to: Math.max(from, to) };
+    state.graph.push({ ...edge });
+    state.debugGraph.addEdge({ ...edge });
 }
 function removeEdge(from, to) {
     function match(edge) {
-        return edge.from == from && edge.to == to || edge.to == from && edge.from == to;
+        return edge.from == from && edge.to == to;
     }
     state.graph = state.graph.filter(x => !match(x));
     state.debugGraph.removeEdge({ from, to });
