@@ -42,6 +42,11 @@ function p5_draw(p) {
         const start = state.nodes[edge.from].point;
         const end = state.nodes[edge.to].point;
         p.line(start.x, start.y, end.x, end.y);
+        if (state.debug) {
+            p.fill("blue");
+            const mid = midpoint(edge);
+            p.circle(mid.x, mid.y, 5);
+        }
     }
     const previewStrokeColor = p.color(0, 0, 0, 120);
     // Draw the currently dragged segment
@@ -343,4 +348,9 @@ function detectCycles(graph, root) {
     visited.add(root);
     dfs(root, visited);
     return cycles;
+}
+function midpoint(edge) {
+    const start = state.nodes[edge.from].point;
+    const end = state.nodes[edge.to].point;
+    return vec_div(vec_add(start, end), 2);
 }
