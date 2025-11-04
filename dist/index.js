@@ -1,32 +1,75 @@
-import { Graph } from "./graph.js";
 import { vec_add, vec_sub, vec_div, vec_mul, vec_magnitude, mat_inverse, mat_mul_vec, vec_normalize } from "./math.js";
-// Config
-const MIN_SEGMENT_LENGTH = 10;
 const state = {
     debug: false,
-    nodes: [],
-    draggedLineStart: null,
-    graph: [],
-    debugGraph: new Graph([], 50),
-    holes: []
+    placementStart: null,
+    editMode: "laser",
+    rays: [],
+    mirrors: []
 };
 function p5_setup(p) {
     p.createCanvas(p.windowWidth, p.windowHeight);
 }
 function p5_draw(p) {
-    p.background("orange");
-    p.stroke("black");
-    p.fill("black");
+    p.background("black");
+    p.stroke("white");
+    p.fill("white");
+    p.noStroke();
+    p.text(state.editMode == "laser" ? "> draw laser (L)" : "  draw laser (L)", 10, 20);
+    p.text(state.editMode == "mirror" ? "> draw mirror (M)" : "  draw mirror (M)", 10, 40);
+    p.stroke("yellow");
+    for (const ray of state.rays) {
+        // Find end point of line very far along the direction from mouse start to mouse end
+        const endPoint = vec_add(ray.start, vec_mul(ray.direction, 10000));
+        p.line(ray.start.x, ray.start.y, endPoint.x, endPoint.y);
+    }
+    p.stroke("lightblue");
+    for (const { start, end } of state.mirrors) {
+        p.line(start.x, start.y, end.x, end.y);
+    }
+    if (state.placementStart) {
+        if (state.editMode == "laser") {
+            p.stroke("yellow");
+            const ray = drawnRay(p);
+            // Find end point of line very far along the direction from mouse start to mouse end
+            const endPoint = vec_add(ray.start, vec_mul(ray.direction, 10000));
+            p.line(ray.start.x, ray.start.y, endPoint.x, endPoint.y);
+        }
+        else if (state.editMode == "mirror") {
+            p.stroke("lightblue");
+            p.line(state.placementStart.x, state.placementStart.y, p.mouseX, p.mouseY);
+        }
+    }
+}
+function drawnRay(p) {
+    const mouse = { x: p.mouseX, y: p.mouseY };
+    const direction = vec_normalize(vec_sub(mouse, state.placementStart));
+    return { start: state.placementStart, direction };
 }
 function p5_mouse_pressed(p) {
-    state.draggedLineStart = { x: p.mouseX, y: p.mouseY };
+    state.placementStart = { x: p.mouseX, y: p.mouseY };
 }
 function p5_key_pressed(p) {
     if (p.key == " ") {
         state.debug = !state.debug;
     }
+    if (p.key == "l" || p.key == "L") {
+        state.editMode = "laser";
+    }
+    if (p.key == "m" || p.key == "M") {
+        state.editMode = "mirror";
+    }
 }
 function p5_mouse_released(p) {
+    if (state.placementStart) {
+        if (state.editMode == "laser") {
+            const ray = drawnRay(p);
+            state.rays.push(ray);
+        }
+        else if (state.editMode == "mirror") {
+            state.mirrors.push({ start: state.placementStart, end: { x: p.mouseX, y: p.mouseY } });
+        }
+    }
+    state.placementStart = null;
 }
 const s = (p) => {
     p.setup = () => p5_setup(p);
@@ -67,16 +110,6 @@ function rayIntersectEdge(ray, edge, nodes) {
         return null;
     }
     return t1;
-}
-function rayIntersectPolygon(ray, polygon) {
-    const ret = [];
-    for (const edge of polygon) {
-        const t = rayIntersectEdge(ray, edge, state.nodes);
-        if (t) {
-            ret.push(t);
-        }
-    }
-    return ret;
 }
 function pointOnRay(ray, t) {
     return vec_add(ray.start, vec_mul(ray.direction, t));
