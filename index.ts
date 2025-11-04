@@ -1,11 +1,13 @@
-import { Graph, draw_graph } from "./graph.js";
-
 import { Vector, Mat2, vec_add, vec_sub, vec_div, vec_mul, vec_magnitude, mat_inverse, mat_mul_vec, vec_normalize } from "./math.js";
-import Interval from "./interval.js";
 
 interface Ray {
     start: Vector;
     direction: Vector;
+}
+
+interface LineSegment {
+    start: Vector;
+    end: Vector;
 }
 
 interface Node {
@@ -18,32 +20,24 @@ interface Edge {
     to: number;
 }
 
-interface Intersection {
-    t: number;
-    edge: Edge
-}
 
-type Polygon = Edge[];
+type EditMode = "laser" | "mirror"
 
-// Config
-const MIN_SEGMENT_LENGTH = 10;
 
 interface State {
     debug: boolean;
-    nodes: Node[];
-    draggedLineStart: Vector | null;
-    holes: Polygon[];
-    graph: Edge[];
-    debugGraph: Graph;
+    placementStart: Vector | null;
+    editMode: EditMode;
+    rays: Ray[];
+    mirrors: LineSegment[];
 }
 
 const state: State = {
     debug: false,
-    nodes: [],
-    draggedLineStart: null,
-    graph: [],
-    debugGraph: new Graph([], 50),
-    holes: []
+    placementStart: null,
+    editMode: "laser",
+    rays: [],
+    mirrors: []
 };
 
 function p5_setup(p: p5) {
@@ -51,22 +45,71 @@ function p5_setup(p: p5) {
 }
 
 function p5_draw(p: p5) {
-    p.background("orange");
-    p.stroke("black");
-    p.fill("black");
+    p.background("black");
+    p.stroke("white");
+    p.fill("white");
+    p.noStroke();
+    p.text(state.editMode == "laser" ? "> draw laser (L)" : "  draw laser (L)", 10, 20);
+    p.text(state.editMode == "mirror" ? "> draw mirror (M)" : "  draw mirror (M)", 10, 40);
+
+    p.stroke("yellow");
+    for (const ray of state.rays) {
+        // Find end point of line very far along the direction from mouse start to mouse end
+        const endPoint = vec_add(ray.start, vec_mul(ray.direction, 10000));
+        p.line(ray.start.x, ray.start.y, endPoint.x, endPoint.y);
+    }
+
+    p.stroke("lightblue");
+    for (const { start, end } of state.mirrors) {
+        p.line(start.x, start.y, end.x, end.y);
+    }
+    
+    if (state.placementStart) {
+        if (state.editMode == "laser") {
+            p.stroke("yellow");
+            const ray = drawnRay(p);
+            // Find end point of line very far along the direction from mouse start to mouse end
+            const endPoint = vec_add(ray.start, vec_mul(ray.direction, 10000));
+            p.line(ray.start.x, ray.start.y, endPoint.x, endPoint.y);
+        } else if (state.editMode == "mirror") {
+            p.stroke("lightblue");
+            p.line(state.placementStart.x, state.placementStart.y, p.mouseX, p.mouseY);
+        }
+    }
+}
+
+function drawnRay(p: p5): Ray {
+    const mouse = { x: p.mouseX, y: p.mouseY };
+    const direction = vec_normalize(vec_sub(mouse, state.placementStart));
+    return { start: state.placementStart, direction };
 }
 
 function p5_mouse_pressed(p: p5) {
-    state.draggedLineStart = { x: p.mouseX, y: p.mouseY };
+    state.placementStart = { x: p.mouseX, y: p.mouseY };
 }
 
 function p5_key_pressed(p: p5) {
     if (p.key == " ") {
         state.debug = !state.debug;
     }
+    if (p.key == "l" || p.key == "L") {
+        state.editMode = "laser";
+    }
+    if (p.key == "m" || p.key == "M") {
+        state.editMode = "mirror";
+    }
 }
 
 function p5_mouse_released(p: p5) {
+    if (state.placementStart) {
+        if (state.editMode == "laser") {
+            const ray = drawnRay(p);
+            state.rays.push(ray);
+        } else if (state.editMode == "mirror") {
+            state.mirrors.push({ start: state.placementStart, end: { x: p.mouseX, y: p.mouseY }});
+        }
+    }
+    state.placementStart = null;
 }
 
 const s = (p: p5) => {
@@ -115,18 +158,6 @@ function rayIntersectEdge(ray: Ray, edge: Edge, nodes: Node[]): number | null {
     }
 
     return t1;
-}
-
-function rayIntersectPolygon(ray: Ray, polygon: Polygon): number[] {
-    const ret = [];
-
-    for (const edge of polygon) {
-        const t = rayIntersectEdge(ray, edge, state.nodes);
-        if (t) {
-            ret.push(t);
-        }
-    }
-    return ret;
 }
 
 function pointOnRay(ray: Ray, t: number): Vector {
