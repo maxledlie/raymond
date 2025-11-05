@@ -1,4 +1,10 @@
-import { vec_add, vec_sub, vec_div, vec_mul, vec_magnitude, mat_inverse, mat_mul_vec, vec_normalize, translation, rotation, mat3_mul_mat, mat3_mul_vec } from "./math.js";
+import { vec_add, vec_sub, vec_mul, vec_magnitude, vec_normalize, translation, rotation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale } from "./math.js";
+function transformRay(ray, transform) {
+    return {
+        start: mat3_mul_vec(transform, ray.start),
+        direction: mat3_mul_vec(transform, ray.direction)
+    };
+}
 const state = {
     debug: false,
     placementStart: null,
@@ -50,8 +56,12 @@ function p5_draw(p) {
         p.line(segment.start.x, segment.start.y, segment.end.x, segment.end.y);
     }
     p.stroke("lightblue");
-    for (const { start, end } of mirrors) {
-        p.line(start.x, start.y, end.x, end.y);
+    for (const { transform } of mirrors) {
+        const startLocal = { x: -1, y: 0 };
+        const endLocal = { x: 1, y: 0 };
+        const startWorld = mat3_mul_vec(transform, startLocal);
+        const endWorld = mat3_mul_vec(transform, endLocal);
+        p.line(startWorld.x, startWorld.y, endWorld.x, endWorld.y);
     }
     if (state.placementStart) {
         if (state.editMode == "laser") {
@@ -114,10 +124,10 @@ function hitTestLaser(laser, screenPoint) {
     const T = translation(laser.start.x, laser.start.y);
     const R = rotation(theta);
     const worldTransform = mat3_mul_mat(T, R);
-    // Inverse transform (world -> local) for this simple transform is rotate(-theta) then translate(-tx, -ty)
-    const Rinv = rotation(-theta);
-    const Tinv = translation(-laser.start.x, -laser.start.y);
-    const inv = mat3_mul_mat(Rinv, Tinv);
+    // Use the generic 3x3 inverse of the world transform
+    const inv = mat3_inverse(worldTransform);
+    if (!inv)
+        return false; // non-invertible - treat as not hittable
     // Transform the screen point into local coords
     const local = mat3_mul_vec(inv, screenPoint);
     // The drawn rectangle is at local coords x in [-40, 0], y in [-10, 10]
@@ -135,14 +145,29 @@ function p5_mouse_released(p) {
             const ray = drawnRay(p);
             const theta = Math.atan2(ray.direction.y, ray.direction.x);
             const transform = mat3_mul_mat(translation(ray.start.x, ray.start.y), rotation(theta));
-            state.entities.push({ type: "laser", start: ray.start, direction: ray.direction, transform });
+            state.entities.push({
+                type: "laser",
+                start: ray.start,
+                direction: ray.direction,
+                transform,
+                inv_transform: mat3_inverse(transform)
+            });
         }
         else if (state.editMode == "mirror") {
             const end = { x: p.mouseX, y: p.mouseY };
             const dir = vec_sub(end, state.placementStart);
             const theta = Math.atan2(dir.y, dir.x);
-            const transform = mat3_mul_mat(translation(state.placementStart.x, state.placementStart.y), rotation(theta));
-            state.entities.push({ type: "mirror", start: state.placementStart, end, transform });
+            console.log("theta: ", theta);
+            const midpoint = vec_mul(vec_add(state.placementStart, end), 0.5);
+            const length = vec_magnitude(vec_sub(end, state.placementStart));
+            const s = length / 2;
+            let transform = mat3_mul_mat(rotation(theta), scale(s, 1));
+            transform = mat3_mul_mat(translation(midpoint.x, midpoint.y), transform);
+            state.entities.push({
+                type: "mirror",
+                transform,
+                inv_transform: mat3_inverse(transform)
+            });
         }
     }
     state.placementStart = null;
@@ -158,34 +183,22 @@ const s = (p) => {
 };
 const sketch = new p5(s);
 function rayIntersectSegment(ray, segment) {
-    // Given a ray and a line segment defined by its start and end,
-    // returns the t-value of intersection if it exists, else null.
-    // The t-value is returned even if negative.
-    const x1 = ray.start;
-    const x2 = segment.start;
-    const d1 = vec_normalize(ray.direction);
-    const d2 = vec_sub(segment.end, segment.start);
-    const length2 = vec_magnitude(d2);
-    const v1 = d1;
-    const v2 = vec_div(d2, length2);
-    // t stores the distance of the point of intersection from the start of each line segment.
-    // The intersection only exists if this is less than the length of each segment.
-    const m = [
-        [v1.x, -v2.x],
-        [v1.y, -v2.y]
-    ];
-    const m_inv = mat_inverse(m);
-    if (m_inv == undefined) {
-        // Lines parallel
+    // Transform the ray into the segment's local space.
+    const r = transformRay(ray, segment.inv_transform);
+    console.log("transformed ray: ", r);
+    // In the segment's local space, it's a horizontal line of length 2 centred at the origin.
+    // So we need to find the distance along the ray at which it intersects the x axis.
+    if (r.direction.x == 0) {
         return null;
     }
-    const delta = vec_sub(x2, x1);
-    const { x: t1, y: t2 } = mat_mul_vec(m_inv, delta);
-    // No intersection if we miss the segment
-    if (t2 < 0 || t2 > length2) {
+    const t = r.start.y / r.direction.y;
+    const intersection = pointOnRay(r, t);
+    // Ray may have missed the segment
+    if (Math.abs(intersection.x) > 1) {
         return null;
     }
-    return t1;
+    console.log("intersection at ", t);
+    return t;
 }
 function pointOnRay(ray, t) {
     return vec_add(ray.start, vec_mul(ray.direction, t));

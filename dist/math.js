@@ -22,13 +22,13 @@ export function mat2_mul(a, scalar) {
         [a[1][0] * scalar, a[1][1] * scalar]
     ];
 }
-export function mat_mul_vec(a, v) {
+export function mat2_mul_vec2(a, v) {
     return {
         x: a[0][0] * v.x + a[0][1] * v.y,
         y: a[1][0] * v.x + a[1][1] * v.y
     };
 }
-export function mat_mul_mat(a, b) {
+export function mat2_mul_mat2(a, b) {
     return [
         [a[0][0] * b[0][0] + a[0][1] * b[1][0], a[0][0] * b[0][1] + a[0][1] * b[1][1]],
         [a[1][0] * b[0][0] + a[1][1] * b[1][0], a[1][0] * b[0][1] + a[1][1] * b[1][1]]
@@ -101,6 +101,36 @@ export function mat3_mul_vec(m, v) {
         return { x, y };
     }
     return { x: x / w, y: y / w };
+}
+/**
+ * Compute the inverse of a 3x3 matrix. Returns undefined if singular.
+ */
+export function mat3_inverse(m) {
+    // Compute the determinant
+    const a00 = m[0][0], a01 = m[0][1], a02 = m[0][2];
+    const a10 = m[1][0], a11 = m[1][1], a12 = m[1][2];
+    const a20 = m[2][0], a21 = m[2][1], a22 = m[2][2];
+    const det = a00 * (a11 * a22 - a12 * a21) -
+        a01 * (a10 * a22 - a12 * a20) +
+        a02 * (a10 * a21 - a11 * a20);
+    if (det === 0)
+        return undefined;
+    const invDet = 1 / det;
+    // Compute adjugate (transpose of cofactor matrix)
+    const b00 = (a11 * a22 - a12 * a21) * invDet;
+    const b01 = -(a01 * a22 - a02 * a21) * invDet;
+    const b02 = (a01 * a12 - a02 * a11) * invDet;
+    const b10 = -(a10 * a22 - a12 * a20) * invDet;
+    const b11 = (a00 * a22 - a02 * a20) * invDet;
+    const b12 = -(a00 * a12 - a02 * a10) * invDet;
+    const b20 = (a10 * a21 - a11 * a20) * invDet;
+    const b21 = -(a00 * a21 - a01 * a20) * invDet;
+    const b22 = (a00 * a11 - a01 * a10) * invDet;
+    return [
+        [b00, b01, b02],
+        [b10, b11, b12],
+        [b20, b21, b22]
+    ];
 }
 export function mat_inverse(m) {
     const det = m[0][0] * m[1][1] - m[0][1] * m[1][0];
