@@ -1,4 +1,4 @@
-import { vec_add, vec_sub, vec_div, vec_mul, vec_magnitude, mat_inverse, mat_mul_vec, vec_normalize } from "./math.js";
+import { vec_add, vec_sub, vec_div, vec_mul, vec_magnitude, mat_inverse, mat_mul_vec, vec_normalize, translation, rotation, mat3_mul_mat, mat3_mul_vec } from "./math.js";
 const state = {
     debug: false,
     placementStart: null,
@@ -16,10 +16,12 @@ function p5_draw(p) {
     p.text(state.editMode == "laser" ? "> draw laser (L)" : "  draw laser (L)", 10, 20);
     p.text(state.editMode == "mirror" ? "> draw mirror (M)" : "  draw mirror (M)", 10, 40);
     // Draw entities
+    const mouseVec = { x: p.mouseX, y: p.mouseY };
     for (const entity of state.entities) {
+        const hovered = hitTest(entity, mouseVec);
         switch (entity.type) {
             case "laser":
-                drawLaser(p, entity);
+                drawLaser(p, entity, hovered);
                 break;
         }
     }
@@ -65,7 +67,7 @@ function p5_draw(p) {
         }
     }
 }
-function drawLaser(p, laser) {
+function drawLaser(p, laser, hovered) {
     // Draw rectangle behind the starting point representing the laser generator
     // Calculate angle of beam
     const theta = Math.atan2(laser.direction.y, laser.direction.x);
@@ -74,7 +76,7 @@ function drawLaser(p, laser) {
     p.rotate(theta);
     p.fill("yellow");
     p.circle(0, 0, 5);
-    p.fill("white");
+    p.fill(hovered ? "green" : "white");
     p.rect(-40, -10, 40, 20);
     p.pop();
 }
@@ -97,14 +99,50 @@ function p5_key_pressed(p) {
         state.editMode = "mirror";
     }
 }
+/** Returns true if clicking at the given world point should highlight the entity */
+function hitTest(entity, mouseVec) {
+    switch (entity.type) {
+        case "laser":
+            return hitTestLaser(entity, mouseVec);
+        case "mirror":
+            return hitTestMirror(entity, mouseVec);
+    }
+}
+function hitTestLaser(laser, screenPoint) {
+    // Build world transform for the laser: translate(start) * rotate(theta)
+    const theta = Math.atan2(laser.direction.y, laser.direction.x);
+    const T = translation(laser.start.x, laser.start.y);
+    const R = rotation(theta);
+    const worldTransform = mat3_mul_mat(T, R);
+    // Inverse transform (world -> local) for this simple transform is rotate(-theta) then translate(-tx, -ty)
+    const Rinv = rotation(-theta);
+    const Tinv = translation(-laser.start.x, -laser.start.y);
+    const inv = mat3_mul_mat(Rinv, Tinv);
+    // Transform the screen point into local coords
+    const local = mat3_mul_vec(inv, screenPoint);
+    // The drawn rectangle is at local coords x in [-40, 0], y in [-10, 10]
+    if (local.x >= -40 && local.x <= 0 && local.y >= -10 && local.y <= 10) {
+        return true;
+    }
+    return false;
+}
+function hitTestMirror(mirror, mouseVec) {
+    return false;
+}
 function p5_mouse_released(p) {
     if (state.placementStart) {
         if (state.editMode == "laser") {
             const ray = drawnRay(p);
-            state.entities.push({ type: "laser", start: ray.start, direction: ray.direction });
+            const theta = Math.atan2(ray.direction.y, ray.direction.x);
+            const transform = mat3_mul_mat(translation(ray.start.x, ray.start.y), rotation(theta));
+            state.entities.push({ type: "laser", start: ray.start, direction: ray.direction, transform });
         }
         else if (state.editMode == "mirror") {
-            state.entities.push({ type: "mirror", start: state.placementStart, end: { x: p.mouseX, y: p.mouseY } });
+            const end = { x: p.mouseX, y: p.mouseY };
+            const dir = vec_sub(end, state.placementStart);
+            const theta = Math.atan2(dir.y, dir.x);
+            const transform = mat3_mul_mat(translation(state.placementStart.x, state.placementStart.y), rotation(theta));
+            state.entities.push({ type: "mirror", start: state.placementStart, end, transform });
         }
     }
     state.placementStart = null;

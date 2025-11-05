@@ -4,6 +4,7 @@ export interface Vector {
 }
 
 export type Mat2 = number[][];
+export type Mat3 = number[][];
 
 export function vec_add(a: Vector, b: Vector): Vector {
     return { x: a.x + b.x, y: a.y + b.y };
@@ -29,7 +30,7 @@ export function vec_normalize(a: Vector): Vector {
     return vec_div(a, vec_magnitude(a));
 }
 
-export function mat_mul(a: Mat2, scalar: number): Mat2 {
+export function mat2_mul(a: Mat2, scalar: number): Mat2 {
     return [
         [ a[0][0] * scalar, a[0][1] * scalar ],
         [ a[1][0] * scalar, a[1][1] * scalar ]
@@ -43,6 +44,88 @@ export function mat_mul_vec(a: Mat2, v: Vector | Vector): Vector | Vector {
     };
 }
 
+export function mat_mul_mat(a: Mat2, b: Mat2) {
+    return [
+        [ a[0][0] * b[0][0] + a[0][1] * b[1][0], a[0][0] * b[0][1] + a[0][1] * b[1][1] ],
+        [ a[1][0] * b[0][0] + a[1][1] * b[1][0], a[1][0] * b[0][1] + a[1][1] * b[1][1] ]
+    ];
+}
+
+// 3x3 matrix (homogeneous coordinates) helpers for 2D affine transforms
+export function mat3_identity(): Mat3 {
+    return [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1]
+    ];
+}
+
+export function translation(tx: number, ty: number): Mat3 {
+    return [
+        [1, 0, tx],
+        [0, 1, ty],
+        [0, 0, 1]
+    ];
+}
+
+export function rotation(theta: number): Mat3 {
+    const c = Math.cos(theta);
+    const s = Math.sin(theta);
+    return [
+        [c, -s, 0],
+        [s,  c, 0],
+        [0,  0, 1]
+    ];
+}
+
+export function scale(sx: number, sy?: number): Mat3 {
+    const _sy = (typeof sy === 'number') ? sy : sx;
+    return [
+        [sx, 0,  0],
+        [0,  _sy, 0],
+        [0,  0,  1]
+    ];
+}
+
+/**
+ * Shear in X and Y. shx is x shear (x' = x + shx * y). shy is y shear (y' = y + shy * x).
+ */
+export function shear(shx: number, shy: number): Mat3 {
+    return [
+        [1,  shx, 0],
+        [shy, 1,  0],
+        [0,   0,  1]
+    ];
+}
+
+export function mat3_mul_mat(a: Mat3, b: Mat3): Mat3 {
+    const res: Mat3 = [ [0,0,0], [0,0,0], [0,0,0] ];
+    for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+            let v = 0;
+            for (let k = 0; k < 3; k++) {
+                v += a[i][k] * b[k][j];
+            }
+            res[i][j] = v;
+        }
+    }
+    return res;
+}
+
+/**
+ * Apply a 3x3 affine matrix to a 2D vector (homogeneous coords).
+ * Returns a Vector; if the resulting w is non-1, performs perspective divide.
+ */
+export function mat3_mul_vec(m: Mat3, v: Vector): Vector {
+    const x = m[0][0] * v.x + m[0][1] * v.y + m[0][2] * 1;
+    const y = m[1][0] * v.x + m[1][1] * v.y + m[1][2] * 1;
+    const w = m[2][0] * v.x + m[2][1] * v.y + m[2][2] * 1;
+    if (w === 0) {
+        return { x, y };
+    }
+    return { x: x / w, y: y / w };
+}
+
 export function mat_inverse(m: Mat2): Mat2 | undefined {
     const det = m[0][0] * m[1][1] - m[0][1] * m[1][0];
     if (det == 0) {
@@ -52,6 +135,5 @@ export function mat_inverse(m: Mat2): Mat2 | undefined {
         [ m[1][1], -m[0][1] ],
         [ -m[1][0], m[0][0] ]
     ];
-    return mat_mul(a, 1 / det);
+    return mat2_mul(a, 1 / det);
 }
-    
