@@ -112,6 +112,14 @@ export function mat3_mul_mat(a: Mat3, b: Mat3): Mat3 {
     return res;
 }
 
+export function mat3_chain(matrices: Mat3[]): Mat3 {
+    let ret = mat3_identity();
+    for (let i = 0; i < matrices.length; i++) {
+        ret = mat3_mul_mat(matrices[matrices.length - 1 - i], ret);
+    }
+    return ret;
+}
+
 /**
  * Apply a 3x3 affine matrix to a 2D vector (homogeneous coords).
  * Returns a Vector; if the resulting w is non-1, performs perspective divide.
