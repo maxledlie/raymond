@@ -37,6 +37,7 @@ type Entity = Laser | Mirror
 interface State {
     debug: boolean;
     placementStart: Vector | null;
+    panStart: Vector | null;
     editMode: EditMode;
     entities: Entity[];
     transform: Mat3;      // Maps points in world space to points on screen space
@@ -46,6 +47,7 @@ interface State {
 const state: State = {
     debug: false,
     placementStart: null,
+    panStart: null,
     editMode: "laser",
     entities: [],
     transform: defaultTransform(),
@@ -61,7 +63,6 @@ function defaultTransform() {
     // Translate so origin is visible
     transform = mat3_mul_mat(translation(500, 500), transform);
     return transform;
-
 }
 
 function p5_setup(p: p5) {
@@ -82,6 +83,17 @@ function p5_draw(p: p5) {
     p.noStroke();
     p.text(state.editMode == "laser" ? "> draw laser (L)" : "  draw laser (L)", 10, 20);
     p.text(state.editMode == "mirror" ? "> draw mirror (M)" : "  draw mirror (M)", 10, 40);
+
+    // Find mouse coordinates
+    const mouseWorld = mat3_mul_vec(state.inv_transform, { x: p.mouseX, y: p.mouseY });
+    p.text(`x: ${mouseWorld.x.toFixed(2)}, y: ${mouseWorld.y.toFixed(2)}`, p.width / 2, 20);
+
+    // Handle panning
+    const panSpeed = 0.02;
+    if (state.panStart != null) {
+        state.transform = mat3_mul_mat(translation(panSpeed * (p.mouseX - state.panStart.x), panSpeed * (p.mouseY - state.panStart.y)), state.transform);
+        state.inv_transform = mat3_inverse(state.transform);
+    }
 
     // Draw coordinate grid
     const gridColor = p.color(100, 100);
@@ -185,8 +197,13 @@ function drawnRay(p: p5): Ray {
     return { start: state.placementStart, direction };
 }
 
-function p5_mouse_pressed(p: p5) {
-    state.placementStart = { x: p.mouseX, y: p.mouseY };
+function p5_mouse_pressed(p: p5, e: MouseEvent) {
+    if (e.button == 0) {
+        state.placementStart = { x: p.mouseX, y: p.mouseY };
+    }
+    if (e.button == 1) {
+        state.panStart = { x: p.mouseX, y: p.mouseY };
+    }
 }
 
 function p5_key_pressed(p: p5) {
@@ -236,40 +253,45 @@ function hitTestMirror(mirror: Entity, mouseVec: Vector) {
     return false;
 }
 
-function p5_mouse_released(p: p5) {
-    if (state.placementStart) {
-        if (state.editMode == "laser") {
-            const ray = drawnRay(p);
-            const theta = Math.atan2(ray.direction.y, ray.direction.x);
-            const transform = mat3_mul_mat(translation(ray.start.x, ray.start.y), rotation(theta));
-            state.entities.push({
-                type: "laser",
-                start: ray.start,
-                direction: ray.direction,
-                transform,
-                inv_transform: mat3_inverse(transform)
-            });
-        } else if (state.editMode == "mirror") {
-            const end = { x: p.mouseX, y: p.mouseY };
-            const dir = vec_sub(end, state.placementStart);
+function p5_mouse_released(p: p5, e: MouseEvent) {
+    if (e.button == 1) {
+        if (state.placementStart) {
+            if (state.editMode == "laser") {
+                const ray = drawnRay(p);
+                const theta = Math.atan2(ray.direction.y, ray.direction.x);
+                const transform = mat3_mul_mat(translation(ray.start.x, ray.start.y), rotation(theta));
+                state.entities.push({
+                    type: "laser",
+                    start: ray.start,
+                    direction: ray.direction,
+                    transform,
+                    inv_transform: mat3_inverse(transform)
+                });
+            } else if (state.editMode == "mirror") {
+                const end = { x: p.mouseX, y: p.mouseY };
+                const dir = vec_sub(end, state.placementStart);
 
-            const theta = Math.atan2(dir.y, dir.x);
-            console.log("theta: ", theta);
+                const theta = Math.atan2(dir.y, dir.x);
+                console.log("theta: ", theta);
 
-            const midpoint = vec_mul(vec_add(state.placementStart, end), 0.5);
+                const midpoint = vec_mul(vec_add(state.placementStart, end), 0.5);
 
-            const length = vec_magnitude(vec_sub(end, state.placementStart));
-            const s = length / 2;
-            let transform = mat3_mul_mat(rotation(theta), scale(s, 1));
-            transform = mat3_mul_mat(translation(midpoint.x, midpoint.y), transform);
-            state.entities.push({
-                type: "mirror",
-                transform,
-                inv_transform: mat3_inverse(transform)
-            });
+                const length = vec_magnitude(vec_sub(end, state.placementStart));
+                const s = length / 2;
+                let transform = mat3_mul_mat(rotation(theta), scale(s, 1));
+                transform = mat3_mul_mat(translation(midpoint.x, midpoint.y), transform);
+                state.entities.push({
+                    type: "mirror",
+                    transform,
+                    inv_transform: mat3_inverse(transform)
+                });
+            }
         }
+        state.placementStart = null;
     }
-    state.placementStart = null;
+    if (e.button == 1) {
+        state.panStart = null;
+    }
 }
 
 function p5_mouse_wheel(p: p5, e: WheelEvent) {
@@ -282,11 +304,9 @@ const s = (p: p5) => {
     p.setup = () => p5_setup(p);
     p.draw = () => p5_draw(p);
     p.keyPressed = () => p5_key_pressed(p);
-    p.mousePressed = () => p5_mouse_pressed(p);
-    p.mouseReleased = () => p5_mouse_released(p);
-    p.touchStarted = () => p5_mouse_pressed(p);
-    p.touchEnded = () => p5_mouse_released(p);
-    p.mouseWheel = (e) => p5_mouse_wheel(p, e);
+    p.mousePressed = (e: MouseEvent) => p5_mouse_pressed(p, e);
+    p.mouseReleased = (e: MouseEvent) => p5_mouse_released(p, e);
+    p.mouseWheel = (e: WheelEvent) => p5_mouse_wheel(p, e);
 }
 
 const sketch = new p5(s);
