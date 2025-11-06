@@ -62,19 +62,19 @@ function p5_draw(p) {
     const gridColor = p.color(100, 100);
     p.stroke(gridColor);
     for (let i = -1000; i < 1000; i++) {
-        const xStartWorld = { x: i, y: -1000000 };
-        const xEndWorld = { x: i, y: 1000000 };
+        const xStartWorld = { x: i, y: -1000 };
+        const xEndWorld = { x: i, y: 1000 };
         drawLine(p, xStartWorld, xEndWorld);
-        const yStartWorld = { x: -1000000, y: i };
-        const yEndWorld = { x: 1000000, y: i };
+        const yStartWorld = { x: -1000, y: i };
+        const yEndWorld = { x: 1000, y: i };
         drawLine(p, yStartWorld, yEndWorld);
     }
     p.strokeWeight(2);
     p.stroke("white");
-    const yAxisStartWorld = { x: 0, y: -1000000 };
-    const yAxisEndWorld = { x: 0, y: 1000000 };
-    const xAxisStartWorld = { x: -1000000, y: 0 };
-    const xAxisEndWorld = { x: 1000000, y: 0 };
+    const yAxisStartWorld = { x: 0, y: -1000 };
+    const yAxisEndWorld = { x: 0, y: 1000 };
+    const xAxisStartWorld = { x: -1000, y: 0 };
+    const xAxisEndWorld = { x: 1000, y: 0 };
     drawLine(p, yAxisStartWorld, yAxisEndWorld);
     drawLine(p, xAxisStartWorld, xAxisEndWorld);
     // Draw entities
