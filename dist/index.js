@@ -1,4 +1,9 @@
 import { vec_add, vec_sub, vec_mul, vec_magnitude, vec_normalize, translation, rotation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity } from "./math.js";
+const tools = [
+    { type: "laser", name: "Laser", hotkey: "l" },
+    { type: "mirror", name: "Mirror", hotkey: "m" },
+    { type: "pan", name: "Pan", hotkey: "p" }
+];
 function transformRay(ray, transform) {
     return {
         start: mat3_mul_vec(transform, ray.start),
@@ -6,13 +11,13 @@ function transformRay(ray, transform) {
     };
 }
 const state = {
-    debug: false,
+    lastMousePos: { x: 0, y: 0 },
     placementStart: null,
     panStart: null,
-    editMode: "laser",
+    tool: "laser",
     entities: [],
-    transform: defaultTransform(),
-    inv_transform: mat3_inverse(defaultTransform()),
+    cameraTransform: defaultTransform(),
+    cameraInverseTransform: mat3_inverse(defaultTransform()),
 };
 function defaultTransform() {
     let transform = mat3_identity();
@@ -27,8 +32,8 @@ function p5_setup(p) {
 }
 /** Draws a line described in world space using the current camera transform and p5 drawing state */
 function drawLine(p, start, end) {
-    const startScreen = mat3_mul_vec(state.transform, start);
-    const endScreen = mat3_mul_vec(state.transform, end);
+    const startScreen = mat3_mul_vec(state.cameraTransform, start);
+    const endScreen = mat3_mul_vec(state.cameraTransform, end);
     p.line(startScreen.x, startScreen.y, endScreen.x, endScreen.y);
 }
 function p5_draw(p) {
@@ -36,16 +41,22 @@ function p5_draw(p) {
     p.stroke("white");
     p.fill("white");
     p.noStroke();
-    p.text(state.editMode == "laser" ? "> draw laser (L)" : "  draw laser (L)", 10, 20);
-    p.text(state.editMode == "mirror" ? "> draw mirror (M)" : "  draw mirror (M)", 10, 40);
+    for (let i = 0; i < tools.length; i++) {
+        const tool = tools[i];
+        const text = (state.tool == tool.type ? "> " : "  ") + tool.name + " (" + tool.hotkey.toUpperCase() + ")";
+        p.text(text, 10, 20 * (i + 1));
+    }
     // Find mouse coordinates
-    const mouseWorld = mat3_mul_vec(state.inv_transform, { x: p.mouseX, y: p.mouseY });
+    const mouseScreen = { x: p.mouseX, y: p.mouseY };
+    const mouseWorld = mat3_mul_vec(state.cameraInverseTransform, mouseScreen);
     p.text(`x: ${mouseWorld.x.toFixed(2)}, y: ${mouseWorld.y.toFixed(2)}`, p.width / 2, 20);
     // Handle panning
-    const panSpeed = 0.02;
     if (state.panStart != null) {
-        state.transform = mat3_mul_mat(translation(panSpeed * (p.mouseX - state.panStart.x), panSpeed * (p.mouseY - state.panStart.y)), state.transform);
-        state.inv_transform = mat3_inverse(state.transform);
+        const panSpeed = 0.5;
+        const mouseDelta = vec_sub(mouseScreen, state.lastMousePos);
+        const pan = vec_mul(mouseDelta, panSpeed);
+        state.cameraTransform = mat3_mul_mat(translation(pan.x, pan.y), state.cameraTransform);
+        state.cameraInverseTransform = mat3_inverse(state.cameraTransform);
     }
     // Draw coordinate grid
     const gridColor = p.color(100, 100);
@@ -109,18 +120,19 @@ function p5_draw(p) {
         p.line(startWorld.x, startWorld.y, endWorld.x, endWorld.y);
     }
     if (state.placementStart) {
-        if (state.editMode == "laser") {
+        if (state.tool == "laser") {
             p.stroke("yellow");
             const ray = drawnRay(p);
             // Find end point of line very far along the direction from mouse start to mouse end
             const endPoint = vec_add(ray.start, vec_mul(ray.direction, 10000));
             p.line(ray.start.x, ray.start.y, endPoint.x, endPoint.y);
         }
-        else if (state.editMode == "mirror") {
+        else if (state.tool == "mirror") {
             p.stroke("lightblue");
             p.line(state.placementStart.x, state.placementStart.y, p.mouseX, p.mouseY);
         }
     }
+    state.lastMousePos = mouseScreen;
 }
 function drawLaser(p, laser, hovered) {
     // Draw rectangle behind the starting point representing the laser generator
@@ -141,22 +153,19 @@ function drawnRay(p) {
     return { start: state.placementStart, direction };
 }
 function p5_mouse_pressed(p, e) {
-    if (e.button == 0) {
-        state.placementStart = { x: p.mouseX, y: p.mouseY };
+    const mousePos = { x: p.mouseX, y: p.mouseY };
+    if (e.button === 0) {
+        state.placementStart = mousePos;
     }
-    if (e.button == 1) {
-        state.panStart = { x: p.mouseX, y: p.mouseY };
+    if (e.button === 1 || state.tool === "pan") {
+        state.panStart = mousePos;
     }
 }
 function p5_key_pressed(p) {
-    if (p.key == " ") {
-        state.debug = !state.debug;
-    }
-    if (p.key == "l" || p.key == "L") {
-        state.editMode = "laser";
-    }
-    if (p.key == "m" || p.key == "M") {
-        state.editMode = "mirror";
+    for (const tool of tools) {
+        if (p.key == tool.hotkey || p.key == tool.hotkey.toUpperCase()) {
+            state.tool = tool.type;
+        }
     }
 }
 /** Returns true if clicking at the given world point should highlight the entity */
@@ -192,7 +201,7 @@ function hitTestMirror(mirror, mouseVec) {
 function p5_mouse_released(p, e) {
     if (e.button == 1) {
         if (state.placementStart) {
-            if (state.editMode == "laser") {
+            if (state.tool == "laser") {
                 const ray = drawnRay(p);
                 const theta = Math.atan2(ray.direction.y, ray.direction.x);
                 const transform = mat3_mul_mat(translation(ray.start.x, ray.start.y), rotation(theta));
@@ -204,7 +213,7 @@ function p5_mouse_released(p, e) {
                     inv_transform: mat3_inverse(transform)
                 });
             }
-            else if (state.editMode == "mirror") {
+            else if (state.tool == "mirror") {
                 const end = { x: p.mouseX, y: p.mouseY };
                 const dir = vec_sub(end, state.placementStart);
                 const theta = Math.atan2(dir.y, dir.x);
@@ -223,14 +232,14 @@ function p5_mouse_released(p, e) {
         }
         state.placementStart = null;
     }
-    if (e.button == 1) {
+    if (e.button == 1 || state.tool == "pan") {
         state.panStart = null;
     }
 }
 function p5_mouse_wheel(p, e) {
     const zoomSpeed = 0.0001;
-    state.transform = mat3_mul_mat(scale(1 - zoomSpeed * e.deltaY), state.transform);
-    state.inv_transform = mat3_inverse(state.transform);
+    state.cameraTransform = mat3_mul_mat(scale(1 - zoomSpeed * e.deltaY), state.cameraTransform);
+    state.cameraInverseTransform = mat3_inverse(state.cameraTransform);
 }
 const s = (p) => {
     p.setup = () => p5_setup(p);
