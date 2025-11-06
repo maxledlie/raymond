@@ -1,4 +1,4 @@
-import { vec_add, vec_sub, vec_mul, vec_magnitude, vec_normalize, translation, rotation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale } from "./math.js";
+import { vec_add, vec_sub, vec_mul, vec_magnitude, vec_normalize, translation, rotation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity } from "./math.js";
 function transformRay(ray, transform) {
     return {
         start: mat3_mul_vec(transform, ray.start),
@@ -10,9 +10,25 @@ const state = {
     placementStart: null,
     editMode: "laser",
     entities: [],
+    transform: defaultTransform(),
+    inv_transform: mat3_inverse(defaultTransform()),
 };
+function defaultTransform() {
+    let transform = mat3_identity();
+    // Flip so y axis points upwards and stretch so each unit is much larger than one pixel.
+    transform = mat3_mul_mat(scale(100, -100), transform);
+    // Translate so origin is visible
+    transform = mat3_mul_mat(translation(500, 500), transform);
+    return transform;
+}
 function p5_setup(p) {
     p.createCanvas(p.windowWidth, p.windowHeight);
+}
+/** Draws a line described in world space using the current camera transform and p5 drawing state */
+function drawLine(p, start, end) {
+    const startScreen = mat3_mul_vec(state.transform, start);
+    const endScreen = mat3_mul_vec(state.transform, end);
+    p.line(startScreen.x, startScreen.y, endScreen.x, endScreen.y);
 }
 function p5_draw(p) {
     p.background("black");
@@ -21,6 +37,25 @@ function p5_draw(p) {
     p.noStroke();
     p.text(state.editMode == "laser" ? "> draw laser (L)" : "  draw laser (L)", 10, 20);
     p.text(state.editMode == "mirror" ? "> draw mirror (M)" : "  draw mirror (M)", 10, 40);
+    // Draw coordinate grid
+    const gridColor = p.color(100, 100);
+    p.stroke(gridColor);
+    for (let i = -1000; i < 1000; i++) {
+        const xStartWorld = { x: i, y: -1000000 };
+        const xEndWorld = { x: i, y: 1000000 };
+        drawLine(p, xStartWorld, xEndWorld);
+        const yStartWorld = { x: -1000000, y: i };
+        const yEndWorld = { x: 1000000, y: i };
+        drawLine(p, yStartWorld, yEndWorld);
+    }
+    p.strokeWeight(2);
+    p.stroke("white");
+    const yAxisStartWorld = { x: 0, y: -1000000 };
+    const yAxisEndWorld = { x: 0, y: 1000000 };
+    const xAxisStartWorld = { x: -1000000, y: 0 };
+    const xAxisEndWorld = { x: 1000000, y: 0 };
+    drawLine(p, yAxisStartWorld, yAxisEndWorld);
+    drawLine(p, xAxisStartWorld, xAxisEndWorld);
     // Draw entities
     const mouseVec = { x: p.mouseX, y: p.mouseY };
     for (const entity of state.entities) {
@@ -172,6 +207,11 @@ function p5_mouse_released(p) {
     }
     state.placementStart = null;
 }
+function p5_mouse_wheel(p, e) {
+    const zoomSpeed = 0.0001;
+    state.transform = mat3_mul_mat(scale(1 - zoomSpeed * e.deltaY), state.transform);
+    state.inv_transform = mat3_inverse(state.transform);
+}
 const s = (p) => {
     p.setup = () => p5_setup(p);
     p.draw = () => p5_draw(p);
@@ -180,6 +220,7 @@ const s = (p) => {
     p.mouseReleased = () => p5_mouse_released(p);
     p.touchStarted = () => p5_mouse_pressed(p);
     p.touchEnded = () => p5_mouse_released(p);
+    p.mouseWheel = (e) => p5_mouse_wheel(p, e);
 };
 const sketch = new p5(s);
 function rayIntersectSegment(ray, segment) {
