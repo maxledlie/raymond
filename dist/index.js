@@ -1,4 +1,4 @@
-import { vec_add, vec_sub, vec_mul, vec_magnitude, vec_normalize, translation, rotation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity } from "./math.js";
+import { vec_add, vec_sub, vec_mul, vec_magnitude, vec_normalize, translation, rotation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity, mat3_chain } from "./math.js";
 const tools = [
     { type: "laser", name: "Laser", hotkey: "l" },
     { type: "mirror", name: "Mirror", hotkey: "m" },
@@ -16,19 +16,21 @@ const state = {
     panStart: null,
     tool: "laser",
     entities: [],
-    cameraTransform: defaultTransform(),
-    cameraInverseTransform: mat3_inverse(defaultTransform()),
+    cameraTransform: mat3_identity(),
+    cameraInverseTransform: mat3_identity()
 };
-function defaultTransform() {
+function defaultTransform(screenWidth, screenHeight) {
     let transform = mat3_identity();
-    // Flip so y axis points upwards and stretch so each unit is much larger than one pixel.
+    // Flip so y axis points upwards and stretch so each unit is much larger than one pixel
     transform = mat3_mul_mat(scale(100, -100), transform);
-    // Translate so origin is visible
-    transform = mat3_mul_mat(translation(500, 500), transform);
+    // Translate so origin is at centre of screen
+    transform = mat3_mul_mat(translation(screenWidth / 2, screenHeight / 2), transform);
     return transform;
 }
 function p5_setup(p) {
     p.createCanvas(p.windowWidth, p.windowHeight);
+    state.cameraTransform = defaultTransform(p.width, p.height);
+    state.cameraInverseTransform = mat3_inverse(state.cameraTransform);
 }
 /** Draws a line described in world space using the current camera transform and p5 drawing state */
 function drawLine(p, start, end) {
@@ -61,20 +63,20 @@ function p5_draw(p) {
     // Draw coordinate grid
     const gridColor = p.color(100, 100);
     p.stroke(gridColor);
-    for (let i = -1000; i < 1000; i++) {
-        const xStartWorld = { x: i, y: -1000 };
-        const xEndWorld = { x: i, y: 1000 };
+    for (let i = -100; i < 100; i++) {
+        const xStartWorld = { x: i, y: -100 };
+        const xEndWorld = { x: i, y: 100 };
         drawLine(p, xStartWorld, xEndWorld);
-        const yStartWorld = { x: -1000, y: i };
-        const yEndWorld = { x: 1000, y: i };
+        const yStartWorld = { x: -100, y: i };
+        const yEndWorld = { x: 100, y: i };
         drawLine(p, yStartWorld, yEndWorld);
     }
     p.strokeWeight(2);
     p.stroke("white");
-    const yAxisStartWorld = { x: 0, y: -1000 };
-    const yAxisEndWorld = { x: 0, y: 1000 };
-    const xAxisStartWorld = { x: -1000, y: 0 };
-    const xAxisEndWorld = { x: 1000, y: 0 };
+    const yAxisStartWorld = { x: 0, y: -100 };
+    const yAxisEndWorld = { x: 0, y: 100 };
+    const xAxisStartWorld = { x: -100, y: 0 };
+    const xAxisEndWorld = { x: 100, y: 0 };
     drawLine(p, yAxisStartWorld, yAxisEndWorld);
     drawLine(p, xAxisStartWorld, xAxisEndWorld);
     // Draw entities
@@ -238,7 +240,11 @@ function p5_mouse_released(p, e) {
 }
 function p5_mouse_wheel(p, e) {
     const zoomSpeed = 0.0001;
-    state.cameraTransform = mat3_mul_mat(scale(1 - zoomSpeed * e.deltaY), state.cameraTransform);
+    const mouseScreen = { x: p.mouseX, y: p.mouseY };
+    const mouseWorld = mat3_mul_vec(state.cameraInverseTransform, mouseScreen);
+    const trans = translation(mouseWorld.x, mouseWorld.y);
+    const transInv = mat3_inverse(trans);
+    state.cameraTransform = mat3_chain([state.cameraTransform, trans, scale(1 - zoomSpeed * e.deltaY), transInv]);
     state.cameraInverseTransform = mat3_inverse(state.cameraTransform);
 }
 const s = (p) => {
