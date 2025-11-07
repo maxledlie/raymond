@@ -326,6 +326,13 @@ function p5_mouse_wheel(p: p5, e: WheelEvent) {
     state.cameraInverseTransform = mat3_inverse(state.cameraTransform);
 }
 
+function p5_window_resized(p: p5) {
+    console.log("Window resized");
+    p.resizeCanvas(p.windowWidth, p.windowHeight);
+    state.cameraTransform = defaultTransform(p.width, p.height);
+    state.cameraInverseTransform = mat3_inverse(state.cameraTransform);
+}
+
 const s = (p: p5) => {
     p.setup = () => p5_setup(p);
     p.draw = () => p5_draw(p);
@@ -333,6 +340,7 @@ const s = (p: p5) => {
     p.mousePressed = (e: MouseEvent) => p5_mouse_pressed(p, e);
     p.mouseReleased = (e: MouseEvent) => p5_mouse_released(p, e);
     p.mouseWheel = (e: WheelEvent) => p5_mouse_wheel(p, e);
+    p.windowResized = () => p5_window_resized(p);
 }
 
 const sketch = new p5(s);
