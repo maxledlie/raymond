@@ -247,6 +247,12 @@ function p5_mouse_wheel(p, e) {
     state.cameraTransform = mat3_chain([state.cameraTransform, trans, scale(1 - zoomSpeed * e.deltaY), transInv]);
     state.cameraInverseTransform = mat3_inverse(state.cameraTransform);
 }
+function p5_window_resized(p) {
+    console.log("Window resized");
+    p.resizeCanvas(p.windowWidth, p.windowHeight);
+    state.cameraTransform = defaultTransform(p.width, p.height);
+    state.cameraInverseTransform = mat3_inverse(state.cameraTransform);
+}
 const s = (p) => {
     p.setup = () => p5_setup(p);
     p.draw = () => p5_draw(p);
@@ -254,6 +260,7 @@ const s = (p) => {
     p.mousePressed = (e) => p5_mouse_pressed(p, e);
     p.mouseReleased = (e) => p5_mouse_released(p, e);
     p.mouseWheel = (e) => p5_mouse_wheel(p, e);
+    p.windowResized = () => p5_window_resized(p);
 };
 const sketch = new p5(s);
 function rayIntersectSegment(ray, segment) {
