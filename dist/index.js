@@ -1,13 +1,15 @@
 import { vec_add, vec_sub, vec_mul, vec_magnitude, vec_normalize, translation, rotation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity, mat3_chain } from "./math.js";
+import Transform from "./transform.js";
 const tools = [
     { type: "laser", name: "Laser", hotkey: "l" },
     { type: "mirror", name: "Mirror", hotkey: "m" },
     { type: "pan", name: "Pan", hotkey: "p" }
 ];
+/* Transforms a given ray from world space into the local space of the object */
 function transformRay(ray, transform) {
     return {
-        start: mat3_mul_vec(transform, ray.start),
-        direction: mat3_mul_vec(transform, ray.direction)
+        start: transform.applyInverse(ray.start),
+        direction: transform.applyInverse(ray.direction)
     };
 }
 const state = {
@@ -80,14 +82,8 @@ function p5_draw(p) {
     drawLine(p, yAxisStartWorld, yAxisEndWorld);
     drawLine(p, xAxisStartWorld, xAxisEndWorld);
     // Draw entities
-    const mouseVec = { x: p.mouseX, y: p.mouseY };
     for (const entity of state.entities) {
-        const hovered = hitTest(entity, mouseVec);
-        switch (entity.type) {
-            case "laser":
-                drawLaser(p, entity, hovered);
-                break;
-        }
+        drawEntity(p, entity);
     }
     const lasers = state.entities.filter(e => e.type == "laser");
     const mirrors = state.entities.filter(e => e.type == "mirror");
@@ -117,9 +113,11 @@ function p5_draw(p) {
     for (const { transform } of mirrors) {
         const startLocal = { x: -1, y: 0 };
         const endLocal = { x: 1, y: 0 };
-        const startWorld = mat3_mul_vec(transform, startLocal);
-        const endWorld = mat3_mul_vec(transform, endLocal);
-        p.line(startWorld.x, startWorld.y, endWorld.x, endWorld.y);
+        const startWorld = transform.apply(startLocal);
+        const endWorld = transform.apply(endLocal);
+        console.log("Mirror start world: ", startWorld);
+        console.log("Mirror end world: ", endWorld);
+        drawLine(p, startWorld, endWorld);
     }
     if (state.placementStart) {
         if (state.tool == "laser") {
@@ -130,11 +128,22 @@ function p5_draw(p) {
             p.line(ray.start.x, ray.start.y, endPoint.x, endPoint.y);
         }
         else if (state.tool == "mirror") {
-            p.stroke("lightblue");
-            p.line(state.placementStart.x, state.placementStart.y, p.mouseX, p.mouseY);
+            const previewMirror = computePreviewMirror(state.placementStart, { x: p.mouseX, y: p.mouseY });
+            drawEntity(p, previewMirror);
         }
     }
     state.lastMousePos = mouseScreen;
+}
+function drawEntity(p, entity) {
+    const hovered = hitTest(entity, { x: p.mouseX, y: p.mouseY });
+    switch (entity.type) {
+        case "laser":
+            drawLaser(p, entity, hovered);
+            break;
+        case "mirror":
+            drawMirror(p, entity, hovered);
+            break;
+    }
 }
 function drawLaser(p, laser, hovered) {
     // Draw rectangle behind the starting point representing the laser generator
@@ -149,6 +158,13 @@ function drawLaser(p, laser, hovered) {
     p.rect(-40, -10, 40, 20);
     p.pop();
 }
+function drawMirror(p, mirror, hovered) {
+    p.stroke("lightblue");
+    p.strokeWeight(2);
+    const startWorld = mirror.transform.apply({ x: -1, y: 0 });
+    const endWorld = mirror.transform.apply({ x: 1, y: 0 });
+    drawLine(p, startWorld, endWorld);
+}
 function drawnRay(p) {
     const mouse = { x: p.mouseX, y: p.mouseY };
     const direction = vec_normalize(vec_sub(mouse, state.placementStart));
@@ -157,7 +173,7 @@ function drawnRay(p) {
 function p5_mouse_pressed(p, e) {
     const mousePos = { x: p.mouseX, y: p.mouseY };
     if (e.button === 0) {
-        state.placementStart = mousePos;
+        state.placementStart = mat3_mul_vec(state.cameraInverseTransform, mousePos);
     }
     if (e.button === 1 || state.tool === "pan") {
         state.panStart = mousePos;
@@ -201,7 +217,7 @@ function hitTestMirror(mirror, mouseVec) {
     return false;
 }
 function p5_mouse_released(p, e) {
-    if (e.button == 1) {
+    if (e.button == 0) {
         if (state.placementStart) {
             if (state.tool == "laser") {
                 const ray = drawnRay(p);
@@ -216,20 +232,8 @@ function p5_mouse_released(p, e) {
                 });
             }
             else if (state.tool == "mirror") {
-                const end = { x: p.mouseX, y: p.mouseY };
-                const dir = vec_sub(end, state.placementStart);
-                const theta = Math.atan2(dir.y, dir.x);
-                console.log("theta: ", theta);
-                const midpoint = vec_mul(vec_add(state.placementStart, end), 0.5);
-                const length = vec_magnitude(vec_sub(end, state.placementStart));
-                const s = length / 2;
-                let transform = mat3_mul_mat(rotation(theta), scale(s, 1));
-                transform = mat3_mul_mat(translation(midpoint.x, midpoint.y), transform);
-                state.entities.push({
-                    type: "mirror",
-                    transform,
-                    inv_transform: mat3_inverse(transform)
-                });
+                const newMirror = computePreviewMirror(state.placementStart, { x: p.mouseX, y: p.mouseY });
+                state.entities.push(newMirror);
             }
         }
         state.placementStart = null;
@@ -237,6 +241,23 @@ function p5_mouse_released(p, e) {
     if (e.button == 1 || state.tool == "pan") {
         state.panStart = null;
     }
+}
+/* Returns the mirror that would be placed if the mouse were released after dragging a certain line on the screen */
+function computePreviewMirror(placementStart, mousePos) {
+    const end = mat3_mul_vec(state.cameraInverseTransform, mousePos);
+    const dir = vec_sub(end, placementStart);
+    const theta = Math.atan2(dir.y, dir.x);
+    const midpoint = vec_mul(vec_add(state.placementStart, end), 0.5);
+    const length = vec_magnitude(vec_sub(end, state.placementStart));
+    const s = length / 2;
+    const transform = new Transform();
+    transform.scale(s, 1);
+    transform.rotate(theta);
+    transform.translate(midpoint.x, midpoint.y);
+    return {
+        type: "mirror",
+        transform
+    };
 }
 function p5_mouse_wheel(p, e) {
     const zoomSpeed = 0.0001;
@@ -265,8 +286,7 @@ const s = (p) => {
 const sketch = new p5(s);
 function rayIntersectSegment(ray, segment) {
     // Transform the ray into the segment's local space.
-    const r = transformRay(ray, segment.inv_transform);
-    console.log("transformed ray: ", r);
+    const r = transformRay(ray, segment.transform);
     // In the segment's local space, it's a horizontal line of length 2 centred at the origin.
     // So we need to find the distance along the ray at which it intersects the x axis.
     if (r.direction.x == 0) {
@@ -278,7 +298,6 @@ function rayIntersectSegment(ray, segment) {
     if (Math.abs(intersection.x) > 1) {
         return null;
     }
-    console.log("intersection at ", t);
     return t;
 }
 function pointOnRay(ray, t) {
