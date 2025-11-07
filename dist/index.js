@@ -1,4 +1,4 @@
-import { vec_add, vec_sub, vec_mul, vec_magnitude, vec_normalize, translation, rotation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity, mat3_chain } from "./math.js";
+import { vec_add, vec_sub, vec_mul, vec_magnitude, vec_normalize, translation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity, mat3_chain } from "./math.js";
 import Transform from "./transform.js";
 const tools = [
     { type: "laser", name: "Laser", hotkey: "l" },
@@ -88,27 +88,26 @@ function p5_draw(p) {
     const lasers = state.entities.filter(e => e.type == "laser");
     const mirrors = state.entities.filter(e => e.type == "mirror");
     // Work out the segments to actually draw
-    const segments = [];
-    for (const laser of lasers) {
-        let tmin = Infinity;
-        for (const mirror of mirrors) {
-            const t = rayIntersectSegment(laser, mirror);
-            if (t != null && t >= 0 && t < tmin) {
-                tmin = t;
-            }
-        }
-        if (tmin == Infinity) {
-            // No intersection: Find end point of line very far along the direction from mouse start to mouse end
-            segments.push({ start: laser.start, end: pointOnRay(laser, 10000) });
-        }
-        else {
-            segments.push({ start: laser.start, end: pointOnRay(laser, tmin) });
-        }
-    }
-    p.stroke("yellow");
-    for (const segment of segments) {
-        p.line(segment.start.x, segment.start.y, segment.end.x, segment.end.y);
-    }
+    // const segments: RaySegment[] = [];
+    // for (const laser of lasers) {
+    //     let tmin = Infinity;
+    //     for (const mirror of mirrors) {
+    //         const t = rayIntersectSegment(laser, mirror);
+    //         if (t != null && t >= 0 && t < tmin) {
+    //             tmin = t;
+    //         }
+    //     }
+    //     if (tmin == Infinity) {
+    //         // No intersection: Find end point of line very far along the direction from mouse start to mouse end
+    //         segments.push({ start: laser.start, end: pointOnRay(laser, 10000) });
+    //     } else {
+    //         segments.push({ start: laser.start, end: pointOnRay(laser, tmin) });
+    //     }
+    // }
+    // p.stroke("yellow");
+    // for (const segment of segments) {
+    //     p.line(segment.start.x, segment.start.y, segment.end.x, segment.end.y);
+    // }
     p.stroke("lightblue");
     for (const { transform } of mirrors) {
         const startLocal = { x: -1, y: 0 };
@@ -121,11 +120,8 @@ function p5_draw(p) {
     }
     if (state.placementStart) {
         if (state.tool == "laser") {
-            p.stroke("yellow");
-            const ray = drawnRay(p);
-            // Find end point of line very far along the direction from mouse start to mouse end
-            const endPoint = vec_add(ray.start, vec_mul(ray.direction, 10000));
-            p.line(ray.start.x, ray.start.y, endPoint.x, endPoint.y);
+            const previewLaser = computePreviewLaser(state.placementStart, { x: p.mouseX, y: p.mouseY });
+            drawEntity(p, previewLaser);
         }
         else if (state.tool == "mirror") {
             const previewMirror = computePreviewMirror(state.placementStart, { x: p.mouseX, y: p.mouseY });
@@ -146,17 +142,21 @@ function drawEntity(p, entity) {
     }
 }
 function drawLaser(p, laser, hovered) {
-    // Draw rectangle behind the starting point representing the laser generator
-    // Calculate angle of beam
-    const theta = Math.atan2(laser.direction.y, laser.direction.x);
-    p.push();
-    p.translate(laser.start.x, laser.start.y);
-    p.rotate(theta);
-    p.fill("yellow");
-    p.circle(0, 0, 5);
+    // Drawing the apparatus as a polygon is probably suboptimal.
+    // Maybe I should transform the canvas and use p.rect?
+    const topLeft = { x: -0.4, y: -0.1 };
+    const topRight = { x: 0, y: -0.1 };
+    const bottomRight = { x: 0, y: 0.1 };
+    const bottomLeft = { x: -0.4, y: 0.1 };
+    p.noStroke();
     p.fill(hovered ? "green" : "white");
-    p.rect(-40, -10, 40, 20);
-    p.pop();
+    p.beginShape();
+    for (const vertex of [topLeft, topRight, bottomRight, bottomLeft]) {
+        const world = laser.transform.apply(vertex);
+        const screen = mat3_mul_vec(state.cameraTransform, world);
+        p.vertex(screen.x, screen.y);
+    }
+    p.endShape();
 }
 function drawMirror(p, mirror, hovered) {
     p.stroke("lightblue");
@@ -196,19 +196,11 @@ function hitTest(entity, mouseVec) {
     }
 }
 function hitTestLaser(laser, screenPoint) {
-    // Build world transform for the laser: translate(start) * rotate(theta)
-    const theta = Math.atan2(laser.direction.y, laser.direction.x);
-    const T = translation(laser.start.x, laser.start.y);
-    const R = rotation(theta);
-    const worldTransform = mat3_mul_mat(T, R);
-    // Use the generic 3x3 inverse of the world transform
-    const inv = mat3_inverse(worldTransform);
-    if (!inv)
-        return false; // non-invertible - treat as not hittable
-    // Transform the screen point into local coords
-    const local = mat3_mul_vec(inv, screenPoint);
+    // Transform point from screen to world to local space
+    const world = mat3_mul_vec(state.cameraInverseTransform, screenPoint);
+    const local = laser.transform.applyInverse(world);
     // The drawn rectangle is at local coords x in [-40, 0], y in [-10, 10]
-    if (local.x >= -40 && local.x <= 0 && local.y >= -10 && local.y <= 10) {
+    if (local.x >= -0.4 && local.x <= 0 && local.y >= -0.1 && local.y <= 0.1) {
         return true;
     }
     return false;
@@ -220,16 +212,8 @@ function p5_mouse_released(p, e) {
     if (e.button == 0) {
         if (state.placementStart) {
             if (state.tool == "laser") {
-                const ray = drawnRay(p);
-                const theta = Math.atan2(ray.direction.y, ray.direction.x);
-                const transform = mat3_mul_mat(translation(ray.start.x, ray.start.y), rotation(theta));
-                state.entities.push({
-                    type: "laser",
-                    start: ray.start,
-                    direction: ray.direction,
-                    transform,
-                    inv_transform: mat3_inverse(transform)
-                });
+                const newLaser = computePreviewLaser(state.placementStart, { x: p.mouseX, y: p.mouseY });
+                state.entities.push(newLaser);
             }
             else if (state.tool == "mirror") {
                 const newMirror = computePreviewMirror(state.placementStart, { x: p.mouseX, y: p.mouseY });
@@ -259,6 +243,18 @@ function computePreviewMirror(placementStart, mousePos) {
         transform
     };
 }
+function computePreviewLaser(placementStart, mousePos) {
+    const end = mat3_mul_vec(state.cameraInverseTransform, mousePos);
+    const dir = vec_sub(end, placementStart);
+    const theta = Math.atan2(dir.y, dir.x);
+    const transform = new Transform();
+    transform.rotate(theta);
+    transform.translate(placementStart.x, placementStart.y);
+    return {
+        type: "laser",
+        transform
+    };
+}
 function p5_mouse_wheel(p, e) {
     const zoomSpeed = 0.0001;
     const mouseScreen = { x: p.mouseX, y: p.mouseY };
@@ -285,6 +281,7 @@ const s = (p) => {
 };
 const sketch = new p5(s);
 function rayIntersectSegment(ray, segment) {
+    return null;
     // Transform the ray into the segment's local space.
     const r = transformRay(ray, segment.transform);
     // In the segment's local space, it's a horizontal line of length 2 centred at the origin.
