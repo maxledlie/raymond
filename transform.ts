@@ -1,4 +1,4 @@
-import { mat3_chain, mat3_inverse, mat3_mul_vec, rotation, translation, scale, Vector } from "./math";
+import { mat3_chain, mat3_inverse, mat3_mul_vec, rotation, translation, scale, Vector } from "./math.js";
 
 export default class Transform {
     _rotation: number = 0;
