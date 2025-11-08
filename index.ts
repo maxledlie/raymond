@@ -1,4 +1,4 @@
-import { Vector, vec_add, vec_sub, vec_mul, vec_magnitude, vec_normalize, Mat3, translation, rotation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity, mat3_chain } from "./math.js";
+import { Vec3, vec_add, vec_sub, vec_mul, vec_magnitude, vec_normalize, Mat3, translation, rotation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity, mat3_chain, newPoint } from "./math.js";
 import Transform from "./transform.js";
 
 interface Laser {
@@ -12,8 +12,8 @@ interface Mirror {
 }
 
 interface Ray {
-    start: Vector;
-    direction: Vector;
+    start: Vec3;
+    direction: Vec3;
 }
 
 type ToolType = "laser" | "mirror" | "pan";
@@ -39,17 +39,17 @@ function transformRay(ray: Ray, transform: Transform): Ray {
 }
 
 interface RaySegment {
-    start: Vector;
-    end: Vector;
+    start: Vec3;
+    end: Vec3;
 }
 
 
 type Entity = Laser | Mirror;
 
 interface State {
-    lastMousePos: Vector;
-    placementStart: Vector | null;  // In world coordinates
-    panStart: Vector | null;
+    lastMousePos: Vec3;
+    placementStart: Vec3 | null;  // In world coordinates
+    panStart: Vec3 | null;
     tool: ToolType;
     entities: Entity[];
     cameraTransform: Mat3;      // Maps points in world space to points on screen space
@@ -57,7 +57,7 @@ interface State {
 }
 
 const state: State = {
-    lastMousePos: { x: 0, y: 0 },
+    lastMousePos: newPoint(0, 0),
     placementStart: null,
     panStart: null,
     tool: "laser",
@@ -84,7 +84,7 @@ function p5_setup(p: p5) {
 }
 
 /** Draws a line described in world space using the current camera transform and p5 drawing state */
-function drawLine(p: p5, start: Vector, end: Vector) {
+function drawLine(p: p5, start: Vec3, end: Vec3) {
     const startScreen = mat3_mul_vec(state.cameraTransform, start);
     const endScreen = mat3_mul_vec(state.cameraTransform, end);
     p.line(startScreen.x, startScreen.y, endScreen.x, endScreen.y);
@@ -103,7 +103,7 @@ function p5_draw(p: p5) {
     }
 
     // Find mouse coordinates
-    const mouseScreen = { x: p.mouseX, y: p.mouseY };
+    const mouseScreen = newPoint(p.mouseX, p.mouseY);
     const mouseWorld = mat3_mul_vec(state.cameraInverseTransform, mouseScreen);
     p.text(`x: ${mouseWorld.x.toFixed(2)}, y: ${mouseWorld.y.toFixed(2)}`, p.width / 2, 20);
 
@@ -120,21 +120,21 @@ function p5_draw(p: p5) {
     const gridColor = p.color(100, 100);
     p.stroke(gridColor);
     for (let i = -100; i < 100; i++) {
-        const xStartWorld = { x: i, y: -100 };
-        const xEndWorld = { x: i, y: 100 };
+        const xStartWorld = newPoint(i, -100);
+        const xEndWorld = newPoint(i, 100);
         drawLine(p, xStartWorld, xEndWorld);
 
-        const yStartWorld = { x: -100, y: i };
-        const yEndWorld = { x: 100, y: i };
+        const yStartWorld = newPoint(-100, i);
+        const yEndWorld = newPoint(100, i);
         drawLine(p, yStartWorld, yEndWorld);
     }
 
     p.strokeWeight(2);
     p.stroke("white");
-    const yAxisStartWorld = { x: 0, y: -100 };
-    const yAxisEndWorld = { x: 0, y: 100 };
-    const xAxisStartWorld = { x: -100, y: 0 };
-    const xAxisEndWorld = { x: 100, y: 0 };
+    const yAxisStartWorld = newPoint(0, -100);
+    const yAxisEndWorld = newPoint(0, 100);
+    const xAxisStartWorld = newPoint(-100, 0);
+    const xAxisEndWorld = newPoint(100, 0);
     drawLine(p, yAxisStartWorld, yAxisEndWorld);
     drawLine(p, xAxisStartWorld, xAxisEndWorld);
 
@@ -147,45 +147,50 @@ function p5_draw(p: p5) {
     const mirrors = state.entities.filter(e => e.type == "mirror");
 
     // Work out the segments to actually draw
-    // const segments: RaySegment[] = [];
-    // for (const laser of lasers) {
-    //     let tmin = Infinity;
-    //     for (const mirror of mirrors) {
-    //         const t = rayIntersectSegment(laser, mirror);
-    //         if (t != null && t >= 0 && t < tmin) {
-    //             tmin = t;
-    //         }
-    //     }
-    //     if (tmin == Infinity) {
-    //         // No intersection: Find end point of line very far along the direction from mouse start to mouse end
-    //         segments.push({ start: laser.start, end: pointOnRay(laser, 10000) });
-    //     } else {
-    //         segments.push({ start: laser.start, end: pointOnRay(laser, tmin) });
-    //     }
-    // }
+    const segments: RaySegment[] = [];
+    for (const laser of lasers) {
+        const ray = {
+            start: laser.transform.apply(newPoint(0, 0)),
+            direction: vec_normalize(vec_sub(laser.transform.apply(newPoint(1, 0)), laser.transform.apply(newPoint(0, 0))))
+        };
+        console.log("ray.start: ", ray.start);
+        console.log("ray.direction: ", ray.direction);
+        let tmin = Infinity;
+        for (const mirror of mirrors) {
+            const t = rayIntersectSegment(ray, mirror);
+            if (t != null && t >= 0 && t < tmin) {
+                tmin = t;
+            }
+        }
+        if (tmin == Infinity) {
+            // No intersection: Find end point of line very far along the direction from mouse start to mouse end
+            // segments.push({ start: laser.start, end: pointOnRay(laser, 10000) });
+        } else {
+            segments.push({ start: ray.start, end: pointOnRay(ray, tmin) });
+        }
+    }
 
-    // p.stroke("yellow");
-    // for (const segment of segments) {
-    //     p.line(segment.start.x, segment.start.y, segment.end.x, segment.end.y);
-    // }
+    p.stroke("yellow");
+    for (const segment of segments) {
+        drawLine(p, segment.start, segment.end);
+    }
 
     p.stroke("lightblue");
     for (const { transform } of mirrors) {
-        const startLocal = {x: -1, y: 0};
-        const endLocal = {x: 1, y: 0};
+        const startLocal = newPoint(-1, 0);
+        const endLocal = newPoint(1, 0);
         const startWorld = transform.apply(startLocal);
         const endWorld = transform.apply(endLocal);
-        console.log("Mirror start world: ", startWorld);
-        console.log("Mirror end world: ", endWorld);
         drawLine(p, startWorld, endWorld);
     }
     
     if (state.placementStart) {
+        const mouse = newPoint(p.mouseX, p.mouseY);
         if (state.tool == "laser") {
-            const previewLaser = computePreviewLaser(state.placementStart, { x: p.mouseX, y: p.mouseY });
+            const previewLaser = computePreviewLaser(state.placementStart, mouse);
             drawEntity(p, previewLaser);
         } else if (state.tool == "mirror") {
-            const previewMirror = computePreviewMirror(state.placementStart, { x: p.mouseX, y: p.mouseY });
+            const previewMirror = computePreviewMirror(state.placementStart, mouse);
             drawEntity(p, previewMirror);
         }
     }
@@ -194,7 +199,7 @@ function p5_draw(p: p5) {
 }
 
 function drawEntity(p: p5, entity: Entity) {
-    const hovered = hitTest(entity, { x: p.mouseX, y: p.mouseY });
+    const hovered = hitTest(entity, newPoint(p.mouseX, p.mouseY));
     switch (entity.type) {
         case "laser":
             drawLaser(p, entity, hovered);
@@ -208,10 +213,10 @@ function drawEntity(p: p5, entity: Entity) {
 function drawLaser(p: p5, laser: Laser, hovered: boolean) {
     // Drawing the apparatus as a polygon is probably suboptimal.
     // Maybe I should transform the canvas and use p.rect?
-    const topLeft = { x: -0.4, y: -0.1 };
-    const topRight = { x: 0, y: -0.1 };
-    const bottomRight = { x: 0, y: 0.1 };
-    const bottomLeft = { x: -0.4, y: 0.1 };
+    const topLeft = newPoint(-0.4, -0.1);
+    const topRight = newPoint(0, -0.1);
+    const bottomRight = newPoint(0, 0.1);
+    const bottomLeft = newPoint(-0.4, 0.1);
     
     p.noStroke();
     p.fill(hovered ? "green" : "white");
@@ -227,19 +232,19 @@ function drawLaser(p: p5, laser: Laser, hovered: boolean) {
 function drawMirror(p: p5, mirror: Mirror, hovered: boolean) {
     p.stroke("lightblue");
     p.strokeWeight(2);
-    const startWorld = mirror.transform.apply({ x: -1, y: 0 });
-    const endWorld = mirror.transform.apply({ x: 1, y: 0 });
+    const startWorld = mirror.transform.apply(newPoint(-1, 0));
+    const endWorld = mirror.transform.apply(newPoint(1, 0));
     drawLine(p, startWorld, endWorld);
 }
 
 function drawnRay(p: p5): Ray {
-    const mouse = { x: p.mouseX, y: p.mouseY };
+    const mouse = newPoint(p.mouseX, p.mouseY);
     const direction = vec_normalize(vec_sub(mouse, state.placementStart));
     return { start: state.placementStart, direction };
 }
 
 function p5_mouse_pressed(p: p5, e: MouseEvent) {
-    const mousePos = { x: p.mouseX, y: p.mouseY };
+    const mousePos = newPoint(p.mouseX, p.mouseY);
     if (e.button === 0) {
         state.placementStart = mat3_mul_vec(state.cameraInverseTransform, mousePos);
     }
@@ -257,7 +262,7 @@ function p5_key_pressed(p: p5) {
 }
 
 /** Returns true if clicking at the given world point should highlight the entity */
-function hitTest(entity: Entity, mouseVec: Vector): boolean {
+function hitTest(entity: Entity, mouseVec: Vec3): boolean {
     switch (entity.type) {
         case "laser":
             return hitTestLaser(entity, mouseVec);
@@ -266,7 +271,7 @@ function hitTest(entity: Entity, mouseVec: Vector): boolean {
     }
 }
 
-function hitTestLaser(laser: Laser, screenPoint: Vector) {
+function hitTestLaser(laser: Laser, screenPoint: Vec3) {
     // Transform point from screen to world to local space
     const world = mat3_mul_vec(state.cameraInverseTransform, screenPoint);
     const local = laser.transform.applyInverse(world);
@@ -278,7 +283,7 @@ function hitTestLaser(laser: Laser, screenPoint: Vector) {
     return false;
 }
 
-function hitTestMirror(mirror: Entity, mouseVec: Vector) {
+function hitTestMirror(mirror: Entity, mouseVec: Vec3) {
     return false;
 }
 
@@ -286,10 +291,10 @@ function p5_mouse_released(p: p5, e: MouseEvent) {
     if (e.button == 0) {
         if (state.placementStart) {
             if (state.tool == "laser") {
-                const newLaser = computePreviewLaser(state.placementStart, { x: p.mouseX, y: p.mouseY });
+                const newLaser = computePreviewLaser(state.placementStart, newPoint(p.mouseX, p.mouseY));
                 state.entities.push(newLaser);
             } else if (state.tool == "mirror") {
-                const newMirror = computePreviewMirror(state.placementStart, { x: p.mouseX, y: p.mouseY });
+                const newMirror = computePreviewMirror(state.placementStart, newPoint(p.mouseX, p.mouseY));
                 state.entities.push(newMirror);
             }
         }
@@ -301,7 +306,7 @@ function p5_mouse_released(p: p5, e: MouseEvent) {
 }
 
 /* Returns the mirror that would be placed if the mouse were released after dragging a certain line on the screen */
-function computePreviewMirror(placementStart: Vector, mousePos: Vector): Mirror {
+function computePreviewMirror(placementStart: Vec3, mousePos: Vec3): Mirror {
     const end = mat3_mul_vec(state.cameraInverseTransform, mousePos);
     const dir = vec_sub(end, placementStart);
     const theta = Math.atan2(dir.y, dir.x);
@@ -318,7 +323,7 @@ function computePreviewMirror(placementStart: Vector, mousePos: Vector): Mirror 
     };
 }
 
-function computePreviewLaser(placementStart: Vector, mousePos: Vector): Laser {
+function computePreviewLaser(placementStart: Vec3, mousePos: Vec3): Laser {
     const end = mat3_mul_vec(state.cameraInverseTransform, mousePos);
     const dir = vec_sub(end, placementStart);
     const theta = Math.atan2(dir.y, dir.x);
@@ -333,7 +338,7 @@ function computePreviewLaser(placementStart: Vector, mousePos: Vector): Laser {
 
 function p5_mouse_wheel(p: p5, e: WheelEvent) {
     const zoomSpeed = 0.0001
-    const mouseScreen = { x: p.mouseX, y: p.mouseY };
+    const mouseScreen = newPoint(p.mouseX, p.mouseY);
     const mouseWorld = mat3_mul_vec(state.cameraInverseTransform, mouseScreen);
     const trans = translation(mouseWorld.x, mouseWorld.y);
     const transInv = mat3_inverse(trans);
@@ -342,7 +347,6 @@ function p5_mouse_wheel(p: p5, e: WheelEvent) {
 }
 
 function p5_window_resized(p: p5) {
-    console.log("Window resized");
     p.resizeCanvas(p.windowWidth, p.windowHeight);
     state.cameraTransform = defaultTransform(p.width, p.height);
     state.cameraInverseTransform = mat3_inverse(state.cameraTransform);
@@ -361,10 +365,12 @@ const s = (p: p5) => {
 const sketch = new p5(s);
 
 
-function rayIntersectSegment(ray: Laser, segment: Mirror): number | null {
-    return null;
+function rayIntersectSegment(ray: Ray, segment: Mirror): number | null {
     // Transform the ray into the segment's local space.
     const r = transformRay(ray, segment.transform);
+
+    console.log("r.start: ", r.start);
+    console.log("r.direction: ", r.direction);
 
     // In the segment's local space, it's a horizontal line of length 2 centred at the origin.
     // So we need to find the distance along the ray at which it intersects the x axis.
@@ -372,16 +378,16 @@ function rayIntersectSegment(ray: Laser, segment: Mirror): number | null {
         return null;
     }
 
-    const t = r.start.y / r.direction.y;
-    const intersection = pointOnRay(r, t);
+    const t = -r.start.y / r.direction.y;
+    const x = r.start.x + t * r.direction.x;
 
     // Ray may have missed the segment
-    if (Math.abs(intersection.x) > 1) {
+    if (Math.abs(x) > 1) {
         return null;
     }
     return t;
 }
 
-function pointOnRay(ray: Ray, t: number): Vector {
+function pointOnRay(ray: Ray, t: number): Vec3 {
     return vec_add(ray.start, vec_mul(ray.direction, t));
 }

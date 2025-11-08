@@ -1,32 +1,41 @@
-export interface Vector {
+export interface Vec3 {
     x: number;
     y: number;
+    w: number;
 }
 
 export type Mat2 = number[][];
 export type Mat3 = number[][];
 
-export function vec_add(a: Vector, b: Vector): Vector {
-    return { x: a.x + b.x, y: a.y + b.y };
+export function newVector(x: number, y: number): Vec3 {
+    return { x, y, w: 0 };
 }
 
-export function vec_sub(a: Vector, b: Vector): Vector {
-    return { x: a.x - b.x, y: a.y - b.y };
+export function newPoint(x: number, y: number): Vec3 {
+    return { x, y, w: 1 };
 }
 
-export function vec_mul(a: Vector, scalar: number): Vector {
-    return { x: a.x * scalar, y: a.y * scalar };
+export function vec_add(a: Vec3, b: Vec3): Vec3 {
+    return { x: a.x + b.x, y: a.y + b.y, w: a.w + b.w };
 }
 
-export function vec_div(a: Vector, scalar: number): Vector {
-    return { x: a.x / scalar, y: a.y / scalar };
+export function vec_sub(a: Vec3, b: Vec3): Vec3 {
+    return { x: a.x - b.x, y: a.y - b.y, w: a.w - b.w };
 }
 
-export function vec_magnitude(a: Vector): number {
+export function vec_mul(a: Vec3, scalar: number): Vec3 {
+    return { x: a.x * scalar, y: a.y * scalar, w: a.w * scalar };
+}
+
+export function vec_div(a: Vec3, scalar: number): Vec3 {
+    return { x: a.x / scalar, y: a.y / scalar, w: a.w / scalar };
+}
+
+export function vec_magnitude(a: Vec3): number {
     return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2));
 }
 
-export function vec_normalize(a: Vector): Vector {
+export function vec_normalize(a: Vec3): Vec3 {
     return vec_div(a, vec_magnitude(a));
 }
 
@@ -35,13 +44,6 @@ export function mat2_mul(a: Mat2, scalar: number): Mat2 {
         [ a[0][0] * scalar, a[0][1] * scalar ],
         [ a[1][0] * scalar, a[1][1] * scalar ]
     ];
-}
-
-export function mat2_mul_vec2(a: Mat2, v: Vector): Vector {
-    return {
-        x: a[0][0] * v.x + a[0][1] * v.y,
-        y: a[1][0] * v.x + a[1][1] * v.y
-    };
 }
 
 export function mat2_mul_mat2(a: Mat2, b: Mat2): Mat2 {
@@ -124,14 +126,11 @@ export function mat3_chain(matrices: Mat3[]): Mat3 {
  * Apply a 3x3 affine matrix to a 2D vector (homogeneous coords).
  * Returns a Vector; if the resulting w is non-1, performs perspective divide.
  */
-export function mat3_mul_vec(m: Mat3, v: Vector): Vector {
+export function mat3_mul_vec(m: Mat3, v: Vec3): Vec3 {
     const x = m[0][0] * v.x + m[0][1] * v.y + m[0][2] * 1;
     const y = m[1][0] * v.x + m[1][1] * v.y + m[1][2] * 1;
     const w = m[2][0] * v.x + m[2][1] * v.y + m[2][2] * 1;
-    if (w === 0) {
-        return { x, y };
-    }
-    return { x: x / w, y: y / w };
+    return { x, y, w };
 }
 
 /**

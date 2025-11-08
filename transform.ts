@@ -1,9 +1,9 @@
-import { mat3_chain, mat3_inverse, mat3_mul_vec, rotation, translation, scale, Vector } from "./math.js";
+import { mat3_chain, mat3_inverse, mat3_mul_vec, rotation, translation, scale, Vec3, newPoint, newVector } from "./math.js";
 
 export default class Transform {
     _rotation: number = 0;
-    _scale: Vector = { x: 1, y: 1 };
-    _translation: Vector = { x: 0, y: 0 };
+    _scale: Vec3 = newVector(1, 1);
+    _translation: Vec3 = newVector(0, 0);
 
     rotate(theta: number) {
         this._rotation += theta;
@@ -20,7 +20,7 @@ export default class Transform {
         this._translation.y += y;
     }
 
-    apply(v: Vector): Vector {
+    apply(v: Vec3): Vec3 {
         const mat = mat3_chain([
             translation(this._translation.x, this._translation.y),
             rotation(this._rotation),
@@ -29,7 +29,7 @@ export default class Transform {
         return mat3_mul_vec(mat, v);
     }
 
-    applyInverse(v: Vector): Vector {
+    applyInverse(v: Vec3): Vec3 {
         const mat = mat3_chain([
             translation(this._translation.x, this._translation.y),
             rotation(this._rotation),

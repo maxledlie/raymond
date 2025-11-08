@@ -1,6 +1,6 @@
 /* Module for drawing a force-directed graph in a p5js sketch */
 
-import { vec_add, vec_div, vec_magnitude, vec_mul, vec_sub, Vector } from "./math.js";
+import { vec_add, vec_div, vec_magnitude, vec_mul, vec_sub, Vec3 } from "./math.js";
 
 // An edge on the graph of connected intersection points
 export interface Edge {
@@ -10,8 +10,8 @@ export interface Edge {
 
 interface Node {
     id: number;
-    position: Vector;
-    velocity: Vector;
+    position: Vec3;
+    velocity: Vec3;
     componentId?: number;
 }
 

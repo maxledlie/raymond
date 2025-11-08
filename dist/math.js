@@ -1,14 +1,20 @@
+export function newVector(x, y) {
+    return { x, y, w: 0 };
+}
+export function newPoint(x, y) {
+    return { x, y, w: 1 };
+}
 export function vec_add(a, b) {
-    return { x: a.x + b.x, y: a.y + b.y };
+    return { x: a.x + b.x, y: a.y + b.y, w: a.w + b.w };
 }
 export function vec_sub(a, b) {
-    return { x: a.x - b.x, y: a.y - b.y };
+    return { x: a.x - b.x, y: a.y - b.y, w: a.w - b.w };
 }
 export function vec_mul(a, scalar) {
-    return { x: a.x * scalar, y: a.y * scalar };
+    return { x: a.x * scalar, y: a.y * scalar, w: a.w * scalar };
 }
 export function vec_div(a, scalar) {
-    return { x: a.x / scalar, y: a.y / scalar };
+    return { x: a.x / scalar, y: a.y / scalar, w: a.w / scalar };
 }
 export function vec_magnitude(a) {
     return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2));
@@ -21,12 +27,6 @@ export function mat2_mul(a, scalar) {
         [a[0][0] * scalar, a[0][1] * scalar],
         [a[1][0] * scalar, a[1][1] * scalar]
     ];
-}
-export function mat2_mul_vec2(a, v) {
-    return {
-        x: a[0][0] * v.x + a[0][1] * v.y,
-        y: a[1][0] * v.x + a[1][1] * v.y
-    };
 }
 export function mat2_mul_mat2(a, b) {
     return [
@@ -104,10 +104,7 @@ export function mat3_mul_vec(m, v) {
     const x = m[0][0] * v.x + m[0][1] * v.y + m[0][2] * 1;
     const y = m[1][0] * v.x + m[1][1] * v.y + m[1][2] * 1;
     const w = m[2][0] * v.x + m[2][1] * v.y + m[2][2] * 1;
-    if (w === 0) {
-        return { x, y };
-    }
-    return { x: x / w, y: y / w };
+    return { x, y, w };
 }
 /**
  * Compute the inverse of a 3x3 matrix. Returns undefined if singular.
