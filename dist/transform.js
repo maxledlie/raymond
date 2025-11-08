@@ -1,9 +1,9 @@
-import { mat3_chain, mat3_inverse, mat3_mul_vec, rotation, translation, scale } from "./math.js";
+import { mat3_chain, mat3_inverse, mat3_mul_vec, rotation, translation, scale, newVector } from "./math.js";
 export default class Transform {
     constructor() {
         this._rotation = 0;
-        this._scale = { x: 1, y: 1 };
-        this._translation = { x: 0, y: 0 };
+        this._scale = newVector(1, 1);
+        this._translation = newVector(0, 0);
     }
     rotate(theta) {
         this._rotation += theta;
