@@ -76,12 +76,11 @@ function p5_draw(p) {
     // Work out the segments to actually draw
     const segments = [];
     for (const laser of lasers) {
+        const fullDir = vec_sub(laser.transform.apply(newPoint(1, 0)), laser.transform.apply(newPoint(0, 0)));
         const ray = {
             start: laser.transform.apply(newPoint(0, 0)),
-            direction: vec_normalize(vec_sub(laser.transform.apply(newPoint(1, 0)), laser.transform.apply(newPoint(0, 0))))
+            direction: vec_normalize(fullDir)
         };
-        console.log("ray.start: ", ray.start);
-        console.log("ray.direction: ", ray.direction);
         let tmin = Infinity;
         for (const mirror of mirrors) {
             const t = rayIntersectSegment(ray, mirror);
@@ -91,7 +90,7 @@ function p5_draw(p) {
         }
         if (tmin == Infinity) {
             // No intersection: Find end point of line very far along the direction from mouse start to mouse end
-            // segments.push({ start: laser.start, end: pointOnRay(laser, 10000) });
+            segments.push({ start: ray.start, end: pointOnRay(ray, 10000) });
         }
         else {
             segments.push({ start: ray.start, end: pointOnRay(ray, tmin) });
@@ -320,14 +319,12 @@ const sketch = new p5(s);
 function rayIntersectSegment(ray, segment) {
     // Transform the ray into the segment's local space.
     const r = transformRay(ray, segment.transform);
-    console.log("r.start: ", r.start);
-    console.log("r.direction: ", r.direction);
     // In the segment's local space, it's a horizontal line of length 2 centred at the origin.
     // So we need to find the distance along the ray at which it intersects the x axis.
     if (r.direction.x == 0) {
         return null;
     }
-    const t = -r.start.y / r.direction.y;
+    const t = (-r.start.y / r.direction.y);
     const x = r.start.x + t * r.direction.x;
     // Ray may have missed the segment
     if (Math.abs(x) > 1) {
