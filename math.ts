@@ -32,7 +32,7 @@ export function vec_div(a: Vec3, scalar: number): Vec3 {
 }
 
 export function vec_magnitude(a: Vec3): number {
-    return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2));
+    return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2) + Math.pow(a.w, 2));
 }
 
 export function vec_normalize(a: Vec3): Vec3 {
@@ -127,9 +127,9 @@ export function mat3_chain(matrices: Mat3[]): Mat3 {
  * Returns a Vector; if the resulting w is non-1, performs perspective divide.
  */
 export function mat3_mul_vec(m: Mat3, v: Vec3): Vec3 {
-    const x = m[0][0] * v.x + m[0][1] * v.y + m[0][2] * 1;
-    const y = m[1][0] * v.x + m[1][1] * v.y + m[1][2] * 1;
-    const w = m[2][0] * v.x + m[2][1] * v.y + m[2][2] * 1;
+    const x = m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.w;
+    const y = m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.w;
+    const w = m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.w;
     return { x, y, w };
 }
 

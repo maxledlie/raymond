@@ -17,7 +17,7 @@ export function vec_div(a, scalar) {
     return { x: a.x / scalar, y: a.y / scalar, w: a.w / scalar };
 }
 export function vec_magnitude(a) {
-    return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2));
+    return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2) + Math.pow(a.w, 2));
 }
 export function vec_normalize(a) {
     return vec_div(a, vec_magnitude(a));
@@ -101,9 +101,9 @@ export function mat3_chain(matrices) {
  * Returns a Vector; if the resulting w is non-1, performs perspective divide.
  */
 export function mat3_mul_vec(m, v) {
-    const x = m[0][0] * v.x + m[0][1] * v.y + m[0][2] * 1;
-    const y = m[1][0] * v.x + m[1][1] * v.y + m[1][2] * 1;
-    const w = m[2][0] * v.x + m[2][1] * v.y + m[2][2] * 1;
+    const x = m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.w;
+    const y = m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.w;
+    const w = m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.w;
     return { x, y, w };
 }
 /**
