@@ -36,6 +36,6 @@ export default class Transform {
             scale(this._scale.x, this._scale.y)
         ]);
         const inv = mat3_inverse(mat);
-        return mat3_mul_vec(inv, v);
+        return inv ? mat3_mul_vec(inv, v) : v;
     }
 }
