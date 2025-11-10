@@ -1,4 +1,4 @@
-import { vec_add, vec_sub, vec_mul, vec_magnitude, vec_normalize, translation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity, mat3_chain, newPoint } from "./math.js";
+import { vec_add, vec_sub, vec_mul, vec_magnitude, vec_normalize, translation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity, mat3_chain, newPoint, newVector } from "./math.js";
 import Transform from "./transform.js";
 const tools = [
     { type: "laser", name: "Laser", hotkey: "l" },
@@ -63,27 +63,13 @@ function p5_draw(p) {
         state.cameraInverseTransform = mat3_inverse(state.cameraTransform);
     }
     // Draw coordinate grid
-    const gridColor = p.color(100, 100);
-    p.stroke(gridColor);
-    for (let i = -100; i < 100; i++) {
-        const xStartWorld = newPoint(i, -100);
-        const xEndWorld = newPoint(i, 100);
-        drawLine(p, xStartWorld, xEndWorld);
-        const yStartWorld = newPoint(-100, i);
-        const yEndWorld = newPoint(100, i);
-        drawLine(p, yStartWorld, yEndWorld);
-    }
-    p.strokeWeight(2);
-    p.stroke("white");
-    const yAxisStartWorld = newPoint(0, -100);
-    const yAxisEndWorld = newPoint(0, 100);
-    const xAxisStartWorld = newPoint(-100, 0);
-    const xAxisEndWorld = newPoint(100, 0);
-    drawLine(p, yAxisStartWorld, yAxisEndWorld);
-    drawLine(p, xAxisStartWorld, xAxisEndWorld);
+    const minorColor = p.color(100, 100);
+    const majorColor = p.color(255);
+    drawCoordinates(p, new Transform(), majorColor, minorColor, 100);
     // Draw entities
     for (const entity of state.entities) {
-        drawEntity(p, entity);
+        const hovered = hitTest(entity, newPoint(p.mouseX, p.mouseY));
+        drawEntity(p, entity, hovered);
     }
     const lasers = state.entities.filter(e => e.type == "laser");
     const mirrors = state.entities.filter(e => e.type == "mirror");
@@ -127,17 +113,16 @@ function p5_draw(p) {
         const mouse = newPoint(p.mouseX, p.mouseY);
         if (state.tool == "laser") {
             const previewLaser = computePreviewLaser(state.placementStart, mouse);
-            drawEntity(p, previewLaser);
+            drawEntity(p, previewLaser, true);
         }
         else if (state.tool == "mirror") {
             const previewMirror = computePreviewMirror(state.placementStart, mouse);
-            drawEntity(p, previewMirror);
+            drawEntity(p, previewMirror, true);
         }
     }
     state.lastMousePos = mouseScreen;
 }
-function drawEntity(p, entity) {
-    const hovered = hitTest(entity, newPoint(p.mouseX, p.mouseY));
+function drawEntity(p, entity, hovered) {
     switch (entity.type) {
         case "laser":
             drawLaser(p, entity, hovered);
@@ -154,6 +139,12 @@ function drawLaser(p, laser, hovered) {
     const topRight = newPoint(0, -0.1);
     const bottomRight = newPoint(0, 0.1);
     const bottomLeft = newPoint(-0.4, 0.1);
+    if (hovered) {
+        // Draw local coordinate system of laser
+        const minorColor = p.color(0, 100, 0, 100);
+        const majorColor = p.color(0, 255, 0, 255);
+        drawCoordinates(p, laser.transform, majorColor, minorColor, 2);
+    }
     p.noStroke();
     p.fill(hovered ? "green" : "white");
     p.beginShape();
@@ -165,16 +156,55 @@ function drawLaser(p, laser, hovered) {
     p.endShape();
 }
 function drawMirror(p, mirror, hovered) {
+    if (hovered) {
+        const majorColor = p.color(100, 100, 255, 255);
+        const minorColor = p.color(100, 100, 255, 200);
+        drawCoordinates(p, mirror.transform, majorColor, minorColor, 2);
+    }
     p.stroke("lightblue");
-    p.strokeWeight(2);
+    p.strokeWeight(hovered ? 4 : 2);
     const startWorld = mirror.transform.apply(newPoint(-1, 0));
     const endWorld = mirror.transform.apply(newPoint(1, 0));
     drawLine(p, startWorld, endWorld);
 }
-function drawnRay(p) {
-    const mouse = newPoint(p.mouseX, p.mouseY);
-    const direction = vec_normalize(vec_sub(mouse, state.placementStart));
-    return { start: state.placementStart, direction };
+/**
+ * Given a `transform` that maps points from one space to another, draws the coordinates
+ * of this new space.
+ */
+function drawCoordinates(p, transform, majorColor, minorColor, gridSize) {
+    p.stroke(1);
+    p.stroke(minorColor);
+    for (let i = -gridSize; i <= gridSize; i++) {
+        const xStartWorld = transform.apply(newPoint(i, -gridSize));
+        const xEndWorld = transform.apply(newPoint(i, gridSize));
+        drawLine(p, xStartWorld, xEndWorld);
+        const yStartWorld = transform.apply(newPoint(-gridSize, i));
+        const yEndWorld = transform.apply(newPoint(gridSize, i));
+        drawLine(p, yStartWorld, yEndWorld);
+    }
+    p.strokeWeight(2);
+    p.stroke(majorColor);
+    const xAxisEndLocal = newPoint(gridSize, 0);
+    const yAxisEndLocal = newPoint(0, gridSize);
+    const yAxisStartWorld = transform.apply(newPoint(0, -gridSize));
+    const yAxisEndWorld = transform.apply(yAxisEndLocal);
+    const xAxisStartWorld = transform.apply(newPoint(-gridSize, 0));
+    const xAxisEndWorld = transform.apply(xAxisEndLocal);
+    drawLine(p, yAxisStartWorld, yAxisEndWorld);
+    drawLine(p, xAxisStartWorld, xAxisEndWorld);
+    // Arrow heads indicating direction of axes
+    const yAxisLeftLocal = vec_add(yAxisEndLocal, newVector(-0.1, -0.1));
+    const yAxisRightLocal = vec_add(yAxisEndLocal, newVector(0.1, -0.1));
+    const yAxisLeftWorld = transform.apply(yAxisLeftLocal);
+    const yAxisRightWorld = transform.apply(yAxisRightLocal);
+    drawLine(p, yAxisEndWorld, yAxisLeftWorld);
+    drawLine(p, yAxisEndWorld, yAxisRightWorld);
+    const xAxisLeftLocal = vec_add(xAxisEndLocal, newVector(-0.1, 0.1));
+    const xAxisRightLocal = vec_add(xAxisEndLocal, newVector(-0.1, -0.1));
+    const xAxisLeftWorld = transform.apply(xAxisLeftLocal);
+    const xAxisRightWorld = transform.apply(xAxisRightLocal);
+    drawLine(p, xAxisEndWorld, xAxisLeftWorld);
+    drawLine(p, xAxisEndWorld, xAxisRightWorld);
 }
 function p5_mouse_pressed(p, e) {
     const mousePos = newPoint(p.mouseX, p.mouseY);
@@ -211,8 +241,10 @@ function hitTestLaser(laser, screenPoint) {
     }
     return false;
 }
-function hitTestMirror(mirror, mouseVec) {
-    return false;
+function hitTestMirror(mirror, screenPoint) {
+    const world = mat3_mul_vec(state.cameraInverseTransform, screenPoint);
+    const local = mirror.transform.applyInverse(world);
+    return Math.abs(local.y) < 0.1 && Math.abs(local.x) < 1;
 }
 function p5_mouse_released(p, e) {
     if (e.button == 0) {
