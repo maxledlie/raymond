@@ -127,29 +127,49 @@ function p5_draw(p: p5) {
         drawEntity(p, entity, hovered);
     }
 
+    let previewLaser = null;
+    if (state.placementStart) {
+        const mouse = newPoint(p.mouseX, p.mouseY);
+        if (state.tool == "laser") {
+            previewLaser = computePreviewLaser(state.placementStart, mouse);
+            drawEntity(p, previewLaser, true);
+        } else if (state.tool == "mirror") {
+            const previewMirror = computePreviewMirror(state.placementStart, mouse);
+            drawEntity(p, previewMirror, true);
+        }
+    }
+
     const lasers = state.entities.filter(e => e.type == "laser");
+    if (previewLaser) {
+        lasers.push(previewLaser);
+    }
     const mirrors = state.entities.filter(e => e.type == "mirror");
 
     // Work out the segments to actually draw
     const segments: RaySegment[] = [];
     for (const laser of lasers) {
         const fullDir = vec_sub(laser.transform.apply(newPoint(1, 0)), laser.transform.apply(newPoint(0, 0)));
-        const ray = {
+        let ray = {
             start: laser.transform.apply(newPoint(0, 0)),
             direction: vec_normalize(fullDir)
         };
-        let tmin = Infinity;
-        for (const mirror of mirrors) {
-            const t = rayIntersectSegment(ray, mirror);
-            if (t != null && t >= 0 && t < tmin) {
-                tmin = t;
+        for (let iReflect = 0; iReflect < 10; iReflect++) {
+            let tmin = Infinity;
+            let hitMirror = null;
+            for (const mirror of mirrors) {
+                const t = rayIntersectSegment(ray, mirror);
+                if (t != null && t >= 0 && t < tmin) {
+                    tmin = t;
+                    hitMirror = mirror;
+                }
             }
-        }
-        if (tmin == Infinity) {
-            // No intersection: Find end point of line very far along the direction from mouse start to mouse end
-            segments.push({ start: ray.start, end: pointOnRay(ray, 10000) });
-        } else {
-            segments.push({ start: ray.start, end: pointOnRay(ray, tmin) });
+            if (tmin == Infinity) {
+                // No intersection: Find end point of line very far along the direction from mouse start to mouse end
+                segments.push({ start: ray.start, end: pointOnRay(ray, 10000) });
+                break;
+            }
+            const hitPoint = pointOnRay(ray, tmin);
+            segments.push({ start: ray.start, end: hitPoint });
         }
     }
 
@@ -167,17 +187,6 @@ function p5_draw(p: p5) {
         drawLine(p, startWorld, endWorld);
     }
     
-    if (state.placementStart) {
-        const mouse = newPoint(p.mouseX, p.mouseY);
-        if (state.tool == "laser") {
-            const previewLaser = computePreviewLaser(state.placementStart, mouse);
-            drawEntity(p, previewLaser, true);
-        } else if (state.tool == "mirror") {
-            const previewMirror = computePreviewMirror(state.placementStart, mouse);
-            drawEntity(p, previewMirror, true);
-        }
-    }
-
     state.lastMousePos = mouseScreen;
 }
 
@@ -190,6 +199,7 @@ function drawEntity(p: p5, entity: Entity, hovered: boolean) {
             drawMirror(p, entity, hovered);
             break;
     }
+    p.strokeWeight(1);
 }
 
 function drawLaser(p: p5, laser: Laser, hovered: boolean) {
