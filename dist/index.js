@@ -105,27 +105,24 @@ function p5_draw(p) {
             start: laser.transform.apply(newPoint(0, 0)),
             direction: vec_normalize(fullDir)
         };
-        for (let iReflect = 0; iReflect < 10; iReflect++) {
-            let tmin = Infinity;
-            let hitShape = null;
-            for (const shape of shapes) {
-                const ts = rayIntersectShape(ray, shape);
-                if (ts.length > 0) {
-                    console.log(ts);
-                    const tMinShape = Math.min(...ts);
-                    if (tMinShape < tmin) {
-                        tmin = tMinShape;
-                        hitShape = shape;
-                    }
-                }
-            }
-            if (tmin == Infinity) {
+        for (let iReflect = 0; iReflect < 100; iReflect++) {
+            const intersections = shapes.flatMap(s => rayIntersectShape(ray, s));
+            const hit = findHit(intersections);
+            if (!hit) {
                 // No intersection: Find end point of line very far along the direction from mouse start to mouse end
                 segments.push({ start: ray.start, end: pointOnRay(ray, 10000) });
                 break;
             }
-            const hitPoint = pointOnRay(ray, tmin);
+            const hitPoint = pointOnRay(ray, hit.t);
+            const normalv = normalAt(hit.shape, hitPoint);
+            console.log("normalv: ", normalv);
+            const reflectv = reflect(ray.direction, normalv);
+            const overPoint = vec_add(hitPoint, vec_mul(normalv, 0.001));
             segments.push({ start: ray.start, end: hitPoint });
+            ray = {
+                start: overPoint,
+                direction: reflectv
+            };
         }
     }
     p.stroke("yellow");
@@ -133,6 +130,17 @@ function p5_draw(p) {
         drawLine(p, segment.start, segment.end);
     }
     state.lastMousePos = mouseScreen;
+}
+/** The "hit" is the intersection with smallest non-negative t-value
+ *  TODO: Keep intersection list sorted while inserting to optimise.
+ **/
+function findHit(intersections) {
+    var _a;
+    const sorted = intersections.sort((a, b) => a.t - b.t);
+    return (_a = sorted.find(x => x.t >= 0)) !== null && _a !== void 0 ? _a : null;
+}
+function reflect(inVec, normal) {
+    return vec_sub(inVec, vec_mul(normal, 2 * vec_dot(inVec, normal)));
 }
 function drawEntity(p, entity, hovered) {
     switch (entity.type) {
@@ -169,6 +177,7 @@ function drawLaser(p, laser, hovered) {
         p.vertex(screen.x, screen.y);
     }
     p.endShape();
+    p.stroke(1);
 }
 function drawQuad(p, quad, hovered) {
     if (hovered) {
@@ -183,6 +192,11 @@ function drawQuad(p, quad, hovered) {
     drawLine(p, startWorld, endWorld);
 }
 function drawCircle(p, circle, hovered) {
+    if (hovered) {
+        const majorColor = p.color(100, 100, 255, 255);
+        const minorColor = p.color(100, 100, 255, 200);
+        drawCoordinates(p, circle.transform, majorColor, minorColor, 2);
+    }
     p.noStroke();
     p.fill("lightblue");
     p.ellipseMode(p.CORNERS);
@@ -254,6 +268,8 @@ function hitTest(entity, mouseVec) {
             return hitTestLaser(entity, mouseVec);
         case "quad":
             return hitTestMirror(entity, mouseVec);
+        case "circle":
+            return hitTestCircle(entity, mouseVec);
     }
 }
 function hitTestLaser(laser, screenPoint) {
@@ -270,6 +286,11 @@ function hitTestMirror(mirror, screenPoint) {
     const world = mat3_mul_vec(state.cameraInverseTransform, screenPoint);
     const local = mirror.transform.applyInverse(world);
     return Math.abs(local.y) < 0.1 && Math.abs(local.x) < 1;
+}
+function hitTestCircle(circle, screenPoint) {
+    const world = mat3_mul_vec(state.cameraInverseTransform, screenPoint);
+    const local = circle.transform.applyInverse(world);
+    return vec_magnitude_sq(local) <= 1;
 }
 function p5_mouse_released(p, e) {
     if (e.button == 0) {
@@ -364,15 +385,44 @@ const s = (p) => {
     p.windowResized = () => p5_window_resized(p);
 };
 const sketch = new p5(s);
+function normalAt(shape, point) {
+    // Transform the point into the shape's local space
+    const local = shape.transform.applyInverse(point);
+    console.log("locaPoint: ", local);
+    let localNormal;
+    switch (shape.type) {
+        case "circle":
+            localNormal = normalAtCircle(local);
+            break;
+        case "quad":
+            localNormal = normalAtQuad(local);
+            break;
+    }
+    // Transform normal vector back to world space
+    const worldNormal = shape.transform.applyInverseTranspose(localNormal);
+    worldNormal.w = 0;
+    return vec_normalize(worldNormal);
+}
+function normalAtCircle(point) {
+    return vec_sub(point, newPoint(0, 0));
+}
+/* Actually doing the calculation for a one-sided line segment currently! */
+function normalAtQuad(point) {
+    return newVector(0, 1);
+}
 function rayIntersectShape(ray, shape) {
     // Transform the ray into the shape's local space.
     const r = transformRay(ray, shape.transform);
+    let ts;
     switch (shape.type) {
         case "circle":
-            return rayIntersectCircle(r);
+            ts = rayIntersectCircle(r);
+            break;
         case "quad":
-            return rayIntersectQuad(r, shape);
+            ts = rayIntersectQuad(r);
+            break;
     }
+    return ts.map(t => ({ t, shape }));
 }
 function rayIntersectCircle(ray) {
     const sphereToRay = vec_sub(ray.start, newPoint(0, 0)); // Effectively just sets w = 0
@@ -388,7 +438,7 @@ function rayIntersectCircle(ray) {
     const thi = (-b + rootDisc) / (2 * a);
     return [tlo, thi];
 }
-function rayIntersectQuad(ray, segment) {
+function rayIntersectQuad(ray) {
     // NOTE: Currently actually the intersection logic for a line segment
     // In the segment's local space, it's a horizontal line of length 2 centred at the origin.
     // So we need to find the distance along the ray at which it intersects the x axis.

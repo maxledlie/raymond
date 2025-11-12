@@ -1,4 +1,4 @@
-import { mat3_chain, mat3_inverse, mat3_mul_vec, rotation, translation, scale, Vec3, newPoint, newVector } from "./math.js";
+import { mat3_chain, mat3_inverse, mat3_mul_vec, rotation, translation, scale, Vec3, newPoint, newVector, Mat3, mat3_transpose } from "./math.js";
 
 export default class Transform {
     _rotation: number = 0;
@@ -20,22 +20,38 @@ export default class Transform {
         this._translation.y += y;
     }
 
-    apply(v: Vec3): Vec3 {
-        const mat = mat3_chain([
+    _matrix(): Mat3 {
+        return mat3_chain([
             translation(this._translation.x, this._translation.y),
             rotation(this._rotation),
             scale(this._scale.x, this._scale.y)
         ]);
-        return mat3_mul_vec(mat, v);
+    }
+
+    apply(v: Vec3): Vec3 {
+        return mat3_mul_vec(this._matrix(), v);
+    }
+
+    applyTranspose(v: Vec3): Vec3 {
+        const mat = this._matrix();
+        const transpose = mat3_transpose(mat);
+        return mat3_mul_vec(transpose, v);
     }
 
     applyInverse(v: Vec3): Vec3 {
-        const mat = mat3_chain([
-            translation(this._translation.x, this._translation.y),
-            rotation(this._rotation),
-            scale(this._scale.x, this._scale.y)
-        ]);
+        const mat = this._matrix();
         const inv = mat3_inverse(mat);
         return inv ? mat3_mul_vec(inv, v) : v;
+    }
+
+    applyInverseTranspose(v: Vec3): Vec3 {
+        const mat = this._matrix();
+        const inv = mat3_inverse(mat);
+        if (!inv) {
+            return v;
+        }
+
+        const inv_transpose = mat3_transpose(inv);
+        return mat3_mul_vec(inv_transpose, v);
     }
 }
