@@ -19,8 +19,14 @@ export function vec_div(a, scalar) {
 export function vec_magnitude(a) {
     return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2) + Math.pow(a.w, 2));
 }
+export function vec_magnitude_sq(a) {
+    return Math.pow(a.x, 2) + Math.pow(a.y, 2) + Math.pow(a.w, 2);
+}
 export function vec_normalize(a) {
     return vec_div(a, vec_magnitude(a));
+}
+export function vec_dot(a, b) {
+    return a.x * b.x + a.y * b.y + a.w * b.w;
 }
 export function mat2_mul(a, scalar) {
     return [
