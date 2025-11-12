@@ -3,7 +3,7 @@
     "version": "0.0.0",
     "description": "Cut and paste.",
     "scripts": {
-        "build": "tsc --watch",
+        "build": "tsc",
         "start": "npx live-server ./dist --no-browser"
     },
     "devDependencies": {

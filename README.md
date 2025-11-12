@@ -1,5 +1,12 @@
-# Paper Cuts
+# Raymond
 
-This is a tiny side project I'm working on at the [Recurse Center](https://www.recurse.com/). Cut pieces out of a sheet of paper and stick them back together again.
+Play with Raymond at [papercuts.rcdis.co](papercuts.rcdis.co).
 
-Why am I making this? Because it's a surprisingly interesting programming puzzle. You should try it too!
+Raymond is a 2D optics simulator. I am building it to help me understand and explain concepts in [ray tracing](https://en.wikipedia.org/wiki/Ray_tracing_(graphics)).
+
+![Rays reflecting off rectangular and ellipsoidal objects in a 2D scene](./images/README_splash.png)
+
+To run Raymond locally, clone this repo and run `npx tsc` to compile the latest TypeScript code to JavaScript in `./dist`. Then run `npx live-server ./dist --no-browser` and visit `localhost:8080`.
+
+Raymond is a static site, written in TypeScript and using [p5js](https://p5js.org/) for draw calls. It is deployed using [Disco](https://disco.cloud/).
+
