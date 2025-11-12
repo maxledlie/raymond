@@ -1,4 +1,5 @@
 import { newPoint, newVector, vec_dot, vec_magnitude_sq, vec_normalize, vec_sub } from "./math.js";
+const EPS = 0.00001;
 export class Shape {
     constructor(transform) {
         this.transform = transform;
@@ -52,25 +53,42 @@ export class Quad extends Shape {
     type() {
         return "quad";
     }
+    _checkAxis(start, direction) {
+        const tminNumerator = (-1 - start);
+        const tmaxNumerator = (+1 - start);
+        let tmin, tmax;
+        if (Math.abs(direction) >= EPS) {
+            tmin = tminNumerator / direction;
+            tmax = tmaxNumerator / direction;
+        }
+        else {
+            tmin = tminNumerator * Infinity;
+            tmax = tmaxNumerator * Infinity;
+        }
+        if (tmin > tmax) {
+            const temp = tmax;
+            tmax = tmin;
+            tmin = temp;
+        }
+        return [tmin, tmax];
+    }
     _intersectLocal(ray) {
-        // NOTE: Currently actually the intersection logic for a line segment
-        // In the segment's local space, it's a horizontal line of length 2 centred at the origin.
-        // So we need to find the distance along the ray at which it intersects the x axis.
-        if (ray.direction.x == 0) {
-            return [];
-        }
-        const t = (-ray.start.y / ray.direction.y);
-        const x = ray.start.x + t * ray.direction.x;
-        // ray may have missed the segment
-        if (Math.abs(x) > 1) {
-            return [];
-        }
-        return [t];
+        const [xtmin, xtmax] = this._checkAxis(ray.start.x, ray.direction.x);
+        const [ytmin, ytmax] = this._checkAxis(ray.start.y, ray.direction.y);
+        const tmin = Math.max(xtmin, ytmin);
+        const tmax = Math.min(xtmax, ytmax);
+        return tmin < tmax ? [tmin, tmax] : [];
     }
     _normalAtLocal(point) {
-        return newVector(0, 1);
+        const maxc = Math.max(Math.abs(point.x), Math.abs(point.y));
+        if (maxc == Math.abs(point.x)) {
+            return newVector(point.x, 0);
+        }
+        else {
+            return newVector(0, point.y);
+        }
     }
     _hitTest(point) {
-        return Math.abs(point.x) <= 1 && Math.abs(point.y) <= 0.1; // TODO: Make square
+        return Math.abs(point.x) <= 1 && Math.abs(point.y) <= 1;
     }
 }

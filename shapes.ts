@@ -1,6 +1,10 @@
+import { Vector } from "p5";
 import { newPoint, newVector, Vec3, vec_dot, vec_magnitude_sq, vec_normalize, vec_sub } from "./math.js";
 import Transform from "./transform.js";
 import { Ray } from "./types.js";
+
+const EPS = 0.00001;
+    
 
 export interface Intersection {
     t: number;
@@ -86,30 +90,46 @@ export class Quad extends Shape {
         return "quad";
     }
 
+    _checkAxis(start: number, direction: number): number[] {
+        const tminNumerator = (-1 - start);
+        const tmaxNumerator = (+1 - start);
+        
+        let tmin, tmax;
+        if (Math.abs(direction) >= EPS) {
+            tmin = tminNumerator / direction;
+            tmax = tmaxNumerator / direction;
+        } else {
+            tmin = tminNumerator * Infinity;
+            tmax = tmaxNumerator * Infinity;
+        }
+
+        if (tmin > tmax) {
+            const temp = tmax;
+            tmax = tmin;
+            tmin = temp;
+        }
+        return [tmin, tmax]
+    }
+
     _intersectLocal(ray: Ray): number[] {
-        // NOTE: Currently actually the intersection logic for a line segment
+        const [xtmin, xtmax] = this._checkAxis(ray.start.x, ray.direction.x);
+        const [ytmin, ytmax] = this._checkAxis(ray.start.y, ray.direction.y);
+        const tmin = Math.max(xtmin, ytmin);
+        const tmax = Math.min(xtmax, ytmax);
 
-        // In the segment's local space, it's a horizontal line of length 2 centred at the origin.
-        // So we need to find the distance along the ray at which it intersects the x axis.
-        if (ray.direction.x == 0) {
-            return [];
-        }
-
-        const t = (-ray.start.y / ray.direction.y);
-        const x = ray.start.x + t * ray.direction.x;
-
-        // ray may have missed the segment
-        if (Math.abs(x) > 1) {
-            return [];
-        }
-        return [t];
+        return tmin < tmax ? [tmin, tmax] : [];
     }
 
     _normalAtLocal(point: Vec3): Vec3 {
-        return newVector(0, 1);
+        const maxc = Math.max(Math.abs(point.x), Math.abs(point.y));
+        if (maxc == Math.abs(point.x)) {
+            return newVector(point.x, 0);
+        } else {
+            return newVector(0, point.y);
+        }
     }
 
     _hitTest(point: Vec3): boolean {
-        return Math.abs(point.x) <= 1 && Math.abs(point.y) <= 0.1; // TODO: Make square
+        return Math.abs(point.x) <= 1 && Math.abs(point.y) <= 1;
     }
 }
