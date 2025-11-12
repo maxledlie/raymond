@@ -35,8 +35,16 @@ export function vec_magnitude(a: Vec3): number {
     return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2) + Math.pow(a.w, 2));
 }
 
+export function vec_magnitude_sq(a: Vec3): number {
+    return Math.pow(a.x, 2) + Math.pow(a.y, 2) + Math.pow(a.w, 2);
+}
+
 export function vec_normalize(a: Vec3): Vec3 {
     return vec_div(a, vec_magnitude(a));
+}
+
+export function vec_dot(a: Vec3, b: Vec3): number {
+    return a.x * b.x + a.y * b.y + a.w * b.w;
 }
 
 export function mat2_mul(a: Mat2, scalar: number): Mat2 {

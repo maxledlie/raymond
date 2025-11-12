@@ -1,4 +1,4 @@
-import { Vec3, vec_add, vec_sub, vec_mul, vec_magnitude, vec_normalize, Mat3, translation, rotation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity, mat3_chain, newPoint, newVector } from "./math.js";
+import { Vec3, vec_add, vec_sub, vec_mul, vec_magnitude, vec_normalize, Mat3, translation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity, mat3_chain, newPoint, newVector, vec_div, vec_magnitude_sq, vec_dot } from "./math.js";
 import Transform from "./transform.js";
 
 interface Laser {
@@ -6,8 +6,13 @@ interface Laser {
     transform: Transform;  // Maps a point from the laser's local space to world space
 }
 
-interface Mirror {
-    type: "mirror";
+interface Quad {
+    type: "quad";
+    transform: Transform;
+}
+
+interface Circle {
+    type: "circle";
     transform: Transform;
 }
 
@@ -16,7 +21,7 @@ interface Ray {
     direction: Vec3;
 }
 
-type ToolType = "laser" | "mirror" | "pan";
+type ToolType = "laser" | "quad" | "circle" | "pan";
 
 interface Tool { 
     type: ToolType;
@@ -26,7 +31,8 @@ interface Tool {
 
 const tools: Tool[] = [
     { type: "laser", name: "Laser", hotkey: "l" },
-    { type: "mirror", name: "Mirror", hotkey: "m" },
+    { type: "circle", name: "Circle", hotkey: "c" },
+    { type: "quad", name: "Quad", hotkey: "q" },
     { type: "pan", name: "Pan", hotkey: "p" }
 ];
 
@@ -44,7 +50,7 @@ interface RaySegment {
 }
 
 
-type Entity = Laser | Mirror;
+type Entity = Laser | Quad | Circle;
 
 interface State {
     lastMousePos: Vec3;
@@ -128,14 +134,18 @@ function p5_draw(p: p5) {
     }
 
     let previewLaser = null;
+    let previewShape = null;
     if (state.placementStart) {
         const mouse = newPoint(p.mouseX, p.mouseY);
         if (state.tool == "laser") {
             previewLaser = computePreviewLaser(state.placementStart, mouse);
             drawEntity(p, previewLaser, true);
-        } else if (state.tool == "mirror") {
-            const previewMirror = computePreviewMirror(state.placementStart, mouse);
-            drawEntity(p, previewMirror, true);
+        } else if (state.tool == "quad") {
+            previewShape = computePreviewQuad(state.placementStart, mouse);
+            drawEntity(p, previewShape, true);
+        } else if (state.tool == "circle") {
+            previewShape = computePreviewCircle(state.placementStart, mouse);
+            drawEntity(p, previewShape, true);
         }
     }
 
@@ -143,7 +153,10 @@ function p5_draw(p: p5) {
     if (previewLaser) {
         lasers.push(previewLaser);
     }
-    const mirrors = state.entities.filter(e => e.type == "mirror");
+    const shapes = state.entities.filter(e => e.type == "quad" || e.type == "circle");
+    if (previewShape) {
+        shapes.push(previewShape);
+    }
 
     // Work out the segments to actually draw
     const segments: RaySegment[] = [];
@@ -155,12 +168,16 @@ function p5_draw(p: p5) {
         };
         for (let iReflect = 0; iReflect < 10; iReflect++) {
             let tmin = Infinity;
-            let hitMirror = null;
-            for (const mirror of mirrors) {
-                const t = rayIntersectSegment(ray, mirror);
-                if (t != null && t >= 0 && t < tmin) {
-                    tmin = t;
-                    hitMirror = mirror;
+            let hitShape = null;
+            for (const shape of shapes) {
+                const ts = rayIntersectShape(ray, shape);
+                if (ts.length > 0) {
+                    console.log(ts);
+                    const tMinShape = Math.min(...ts);
+                    if (tMinShape < tmin) {
+                        tmin = tMinShape;
+                        hitShape = shape;
+                    }
                 }
             }
             if (tmin == Infinity) {
@@ -178,15 +195,6 @@ function p5_draw(p: p5) {
         drawLine(p, segment.start, segment.end);
     }
 
-    p.stroke("lightblue");
-    for (const { transform } of mirrors) {
-        const startLocal = newPoint(-1, 0);
-        const endLocal = newPoint(1, 0);
-        const startWorld = transform.apply(startLocal);
-        const endWorld = transform.apply(endLocal);
-        drawLine(p, startWorld, endWorld);
-    }
-    
     state.lastMousePos = mouseScreen;
 }
 
@@ -195,9 +203,11 @@ function drawEntity(p: p5, entity: Entity, hovered: boolean) {
         case "laser":
             drawLaser(p, entity, hovered);
             break;
-        case "mirror":
-            drawMirror(p, entity, hovered);
+        case "quad":
+            drawQuad(p, entity, hovered);
             break;
+        case "circle":
+            drawCircle(p, entity, hovered);
     }
     p.strokeWeight(1);
 }
@@ -228,18 +238,29 @@ function drawLaser(p: p5, laser: Laser, hovered: boolean) {
     p.endShape();
 }
 
-function drawMirror(p: p5, mirror: Mirror, hovered: boolean) {
+function drawQuad(p: p5, quad: Quad, hovered: boolean) {
     if (hovered) {
         const majorColor = p.color(100, 100, 255, 255);
         const minorColor = p.color(100, 100, 255, 200);
-        drawCoordinates(p, mirror.transform, majorColor, minorColor, 2);
+        drawCoordinates(p, quad.transform, majorColor, minorColor, 2);
     }
 
     p.stroke("lightblue");
-    p.strokeWeight(hovered ? 4 : 2);
-    const startWorld = mirror.transform.apply(newPoint(-1, 0));
-    const endWorld = mirror.transform.apply(newPoint(1, 0));
+    p.strokeWeight(hovered ? 4 : 2)
+    const startWorld = quad.transform.apply(newPoint(-1, 0));
+    const endWorld = quad.transform.apply(newPoint(1, 0));
     drawLine(p, startWorld, endWorld);
+}
+
+function drawCircle(p: p5, circle: Circle, hovered: boolean) {
+    p.noStroke();
+    p.fill("lightblue");
+    p.ellipseMode(p.CORNERS);
+    const topLeftWorld = circle.transform.apply(newPoint(-1, 1));
+    const bottomRightWorld = circle.transform.apply(newPoint(1, -1));
+    const topLeftScreen = mat3_mul_vec(state.cameraTransform, topLeftWorld);
+    const bottomRightScreen = mat3_mul_vec(state.cameraTransform, bottomRightWorld);
+    p.ellipse(topLeftScreen.x, topLeftScreen.y, bottomRightScreen.x, bottomRightScreen.y);
 }
 
 /**
@@ -309,7 +330,7 @@ function hitTest(entity: Entity, mouseVec: Vec3): boolean {
     switch (entity.type) {
         case "laser":
             return hitTestLaser(entity, mouseVec);
-        case "mirror":
+        case "quad":
             return hitTestMirror(entity, mouseVec);
     }
 }
@@ -339,9 +360,12 @@ function p5_mouse_released(p: p5, e: MouseEvent) {
             if (state.tool == "laser") {
                 const newLaser = computePreviewLaser(state.placementStart, newPoint(p.mouseX, p.mouseY));
                 state.entities.push(newLaser);
-            } else if (state.tool == "mirror") {
-                const newMirror = computePreviewMirror(state.placementStart, newPoint(p.mouseX, p.mouseY));
+            } else if (state.tool == "quad") {
+                const newMirror = computePreviewQuad(state.placementStart, newPoint(p.mouseX, p.mouseY));
                 state.entities.push(newMirror);
+            } else if (state.tool == "circle") {
+                const newCircle = computePreviewCircle(state.placementStart, newPoint(p.mouseX, p.mouseY));
+                state.entities.push(newCircle);
             }
         }
         state.placementStart = null;
@@ -352,7 +376,7 @@ function p5_mouse_released(p: p5, e: MouseEvent) {
 }
 
 /* Returns the mirror that would be placed if the mouse were released after dragging a certain line on the screen */
-function computePreviewMirror(placementStart: Vec3, mousePos: Vec3): Mirror {
+function computePreviewQuad(placementStart: Vec3, mousePos: Vec3): Quad {
     const end = mat3_mul_vec(state.cameraInverseTransform, mousePos);
     const dir = vec_sub(end, placementStart);
     const theta = Math.atan2(dir.y, dir.x);
@@ -364,7 +388,28 @@ function computePreviewMirror(placementStart: Vec3, mousePos: Vec3): Mirror {
     transform.rotate(theta);
     transform.translate(midpoint.x, midpoint.y);
     return {
-        type: "mirror",
+        type: "quad",
+        transform
+    };
+}
+
+/**
+ * Returns the circle (ellipse) that would be placed if the mouse were released after dragging a certain line on the screen.
+ * The sphere is that which would fill the axis-aligned bounding box of which the drawn line is the diagonal.
+ */
+function computePreviewCircle(placementStart: Vec3, mousePos: Vec3): Circle {
+    const endWorld = mat3_mul_vec(state.cameraInverseTransform, mousePos);
+    const startWorld = placementStart;
+
+    const width = Math.abs(endWorld.x - startWorld.x);
+    const height = Math.abs(endWorld.y - startWorld.y);
+
+    const centre = vec_div(vec_add(startWorld, endWorld), 2);
+    const transform = new Transform();
+    transform.scale(width, height);
+    transform.translate(centre.x, centre.y);
+    return {
+        type: "circle",
         transform
     };
 }
@@ -411,24 +456,52 @@ const s = (p: p5) => {
 const sketch = new p5(s);
 
 
-function rayIntersectSegment(ray: Ray, segment: Mirror): number | null {
-    // Transform the ray into the segment's local space.
-    const r = transformRay(ray, segment.transform);
+function rayIntersectShape(ray: Ray, shape: Entity): number[] {
+    // Transform the ray into the shape's local space.
+    const r = transformRay(ray, shape.transform);
+
+    switch (shape.type) {
+        case "circle":
+            return rayIntersectCircle(r);
+        case "quad":
+            return rayIntersectQuad(r, shape);
+    }
+}
+
+function rayIntersectCircle(ray: Ray): number[] {
+    const sphereToRay = vec_sub(ray.start, newPoint(0, 0))  // Effectively just sets w = 0
+    const a = vec_magnitude_sq(ray.direction);
+    const b = 2 * vec_dot(ray.start, ray.direction);
+    const c = vec_magnitude_sq(sphereToRay) - 1;
+
+    const disc = b * b - 4 * a * c;
+    if (disc < 0) {
+        return [];
+    }
+
+    const rootDisc = Math.sqrt(disc);
+    const tlo = (-b - rootDisc) / (2 * a);
+    const thi = (-b + rootDisc) / (2 * a);
+    return [tlo, thi];
+}
+
+function rayIntersectQuad(ray: Ray, segment: Quad): number[] {
+    // NOTE: Currently actually the intersection logic for a line segment
 
     // In the segment's local space, it's a horizontal line of length 2 centred at the origin.
     // So we need to find the distance along the ray at which it intersects the x axis.
-    if (r.direction.x == 0) {
-        return null;
+    if (ray.direction.x == 0) {
+        return [];
     }
 
-    const t = (-r.start.y / r.direction.y);
-    const x = r.start.x + t * r.direction.x;
+    const t = (-ray.start.y / ray.direction.y);
+    const x = ray.start.x + t * ray.direction.x;
 
-    // Ray may have missed the segment
+    // ray may have missed the segment
     if (Math.abs(x) > 1) {
-        return null;
+        return [];
     }
-    return t;
+    return [t];
 }
 
 function pointOnRay(ray: Ray, t: number): Vec3 {
