@@ -4,7 +4,7 @@ import Transform from "./transform.js";
 import { Ray, Laser } from "./types.js";
 
 
-type ToolType = "laser" | "quad" | "circle" | "pan";
+type ToolType = "laser" | "quad" | "circle" | "pan" | "select";
 
 interface Tool { 
     type: ToolType;
@@ -16,7 +16,8 @@ const tools: Tool[] = [
     { type: "laser", name: "Laser", hotkey: "l" },
     { type: "circle", name: "Circle", hotkey: "c" },
     { type: "quad", name: "Quad", hotkey: "q" },
-    { type: "pan", name: "Pan", hotkey: "p" }
+    { type: "pan", name: "Pan", hotkey: "p" },
+    { type: "select", name: "Select", hotkey: "s" }
 ];
 
 interface RaySegment {
@@ -31,6 +32,7 @@ interface State {
     tool: ToolType;
     lasers: Laser[];
     shapes: Shape[];
+    selectedShapeIndex: number | null;
     cameraTransform: Mat3;      // Maps points in world space to points on screen space
     cameraInverseTransform: Mat3;  // Maps points in screen space to points in world space
 }
@@ -42,6 +44,7 @@ const state: State = {
     tool: "laser",
     lasers: [],
     shapes: [],
+    selectedShapeIndex: null,
     cameraTransform: mat3_identity(),
     cameraInverseTransform: mat3_identity()
 };
@@ -131,9 +134,9 @@ function p5_draw(p: p5) {
     }
 
     // Draw shapes including preview shape
-    for (const shape of shapes) {
+    for (const [i, shape] of shapes.entries()) {
         const hovered = hitTestShape(shape, newPoint(p.mouseX, p.mouseY));
-        drawShape(p, shape, hovered);
+        drawShape(p, shape, hovered, i === state.selectedShapeIndex);
     }
 
     // Work out the segments to actually draw
@@ -188,8 +191,14 @@ function reflect(inVec: Vec3, normal: Vec3) {
     return vec_sub(inVec, vec_mul(normal, 2 * vec_dot(inVec, normal)))
 }
 
-function drawShape(p: p5, shape: Shape, hovered: boolean) {
+function drawShape(p: p5, shape: Shape, hovered: boolean, selected: boolean) {
     // TODO: Should this be made an abstract method of the `Shape` class?
+    if (selected) {
+        p.strokeWeight(2);
+        p.stroke("white");
+    } else {
+        p.noStroke();
+    }
     switch (shape.type()) {
         case "quad":
             drawQuad(p, shape as Quad, hovered);
@@ -235,7 +244,6 @@ function drawQuad(p: p5, quad: Quad, hovered: boolean) {
         drawCoordinates(p, quad.transform, majorColor, minorColor, 2);
     }
 
-    p.noStroke();
     p.fill("lightblue");
     const topLeftWorld = quad.transform.apply(newPoint(-1, 1));
     const bottomRightWorld = quad.transform.apply(newPoint(1, -1));
@@ -251,7 +259,6 @@ function drawCircle(p: p5, circle: Circle, hovered: boolean) {
         drawCoordinates(p, circle.transform, majorColor, minorColor, 2);
     }
 
-    p.noStroke();
     p.fill("lightblue");
     p.ellipseMode(p.CORNERS);
     const topLeftWorld = circle.transform.apply(newPoint(-1, 1));
@@ -306,16 +313,36 @@ function drawCoordinates(p: p5, transform: Transform, majorColor: p5.Color, mino
 }
 
 function p5_mouse_pressed(p: p5, e: MouseEvent) {
-    const mousePos = newPoint(p.mouseX, p.mouseY);
+    const mouseScreen = newPoint(p.mouseX, p.mouseY);
+    const mouseWorld = mat3_mul_vec(state.cameraInverseTransform, mouseScreen);
+
     if (e.button === 0) {
-        state.placementStart = mat3_mul_vec(state.cameraInverseTransform, mousePos);
+        if (state.tool === "select") {
+            // Select the most-recently-placed object that we are currently hovering over
+            let selectionIndex = -1;
+            for (let i = state.shapes.length - 1; i >= 0; i--) {
+                if (state.shapes[i].hitTest(mouseWorld)) {
+                    selectionIndex = i;
+                }
+            }
+            if (selectionIndex >= 0) {
+                console.log(`Selected shape ${selectionIndex}`);
+                state.selectedShapeIndex = selectionIndex;
+            }
+        } else {
+            state.placementStart = mat3_mul_vec(state.cameraInverseTransform, mouseScreen);
+        }
     }
     if (e.button === 1 || state.tool === "pan") {
-        state.panStart = mousePos;
+        state.panStart = mouseScreen;
     }
 }
 
 function p5_key_pressed(p: p5) {
+    if (p.keyCode === p.DELETE && state.selectedShapeIndex != null) {
+        state.shapes.splice(state.selectedShapeIndex, 1);
+        state.selectedShapeIndex = null;
+    }
     for (const tool of tools) {
         if (p.key == tool.hotkey || p.key == tool.hotkey.toUpperCase())  {
             state.tool = tool.type;

@@ -5,7 +5,8 @@ const tools = [
     { type: "laser", name: "Laser", hotkey: "l" },
     { type: "circle", name: "Circle", hotkey: "c" },
     { type: "quad", name: "Quad", hotkey: "q" },
-    { type: "pan", name: "Pan", hotkey: "p" }
+    { type: "pan", name: "Pan", hotkey: "p" },
+    { type: "select", name: "Select", hotkey: "s" }
 ];
 const state = {
     lastMousePos: newPoint(0, 0),
@@ -14,6 +15,7 @@ const state = {
     tool: "laser",
     lasers: [],
     shapes: [],
+    selectedShapeIndex: null,
     cameraTransform: mat3_identity(),
     cameraInverseTransform: mat3_identity()
 };
@@ -91,9 +93,9 @@ function p5_draw(p) {
         drawLaser(p, laser, hovered);
     }
     // Draw shapes including preview shape
-    for (const shape of shapes) {
+    for (const [i, shape] of shapes.entries()) {
         const hovered = hitTestShape(shape, newPoint(p.mouseX, p.mouseY));
-        drawShape(p, shape, hovered);
+        drawShape(p, shape, hovered, i === state.selectedShapeIndex);
     }
     // Work out the segments to actually draw
     const segments = [];
@@ -142,8 +144,15 @@ function findHit(intersections) {
 function reflect(inVec, normal) {
     return vec_sub(inVec, vec_mul(normal, 2 * vec_dot(inVec, normal)));
 }
-function drawShape(p, shape, hovered) {
+function drawShape(p, shape, hovered, selected) {
     // TODO: Should this be made an abstract method of the `Shape` class?
+    if (selected) {
+        p.strokeWeight(2);
+        p.stroke("white");
+    }
+    else {
+        p.noStroke();
+    }
     switch (shape.type()) {
         case "quad":
             drawQuad(p, shape, hovered);
@@ -184,7 +193,6 @@ function drawQuad(p, quad, hovered) {
         const minorColor = p.color(100, 100, 255, 200);
         drawCoordinates(p, quad.transform, majorColor, minorColor, 2);
     }
-    p.noStroke();
     p.fill("lightblue");
     const topLeftWorld = quad.transform.apply(newPoint(-1, 1));
     const bottomRightWorld = quad.transform.apply(newPoint(1, -1));
@@ -198,7 +206,6 @@ function drawCircle(p, circle, hovered) {
         const minorColor = p.color(100, 100, 255, 200);
         drawCoordinates(p, circle.transform, majorColor, minorColor, 2);
     }
-    p.noStroke();
     p.fill("lightblue");
     p.ellipseMode(p.CORNERS);
     const topLeftWorld = circle.transform.apply(newPoint(-1, 1));
@@ -247,15 +254,35 @@ function drawCoordinates(p, transform, majorColor, minorColor, gridSize) {
     drawLine(p, xAxisEndWorld, xAxisRightWorld);
 }
 function p5_mouse_pressed(p, e) {
-    const mousePos = newPoint(p.mouseX, p.mouseY);
+    const mouseScreen = newPoint(p.mouseX, p.mouseY);
+    const mouseWorld = mat3_mul_vec(state.cameraInverseTransform, mouseScreen);
     if (e.button === 0) {
-        state.placementStart = mat3_mul_vec(state.cameraInverseTransform, mousePos);
+        if (state.tool === "select") {
+            // Select the most-recently-placed object that we are currently hovering over
+            let selectionIndex = -1;
+            for (let i = state.shapes.length - 1; i >= 0; i--) {
+                if (state.shapes[i].hitTest(mouseWorld)) {
+                    selectionIndex = i;
+                }
+            }
+            if (selectionIndex >= 0) {
+                console.log(`Selected shape ${selectionIndex}`);
+                state.selectedShapeIndex = selectionIndex;
+            }
+        }
+        else {
+            state.placementStart = mat3_mul_vec(state.cameraInverseTransform, mouseScreen);
+        }
     }
     if (e.button === 1 || state.tool === "pan") {
-        state.panStart = mousePos;
+        state.panStart = mouseScreen;
     }
 }
 function p5_key_pressed(p) {
+    if (p.keyCode === p.DELETE && state.selectedShapeIndex != null) {
+        state.shapes.splice(state.selectedShapeIndex, 1);
+        state.selectedShapeIndex = null;
+    }
     for (const tool of tools) {
         if (p.key == tool.hotkey || p.key == tool.hotkey.toUpperCase()) {
             state.tool = tool.type;
