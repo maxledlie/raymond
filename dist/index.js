@@ -1,4 +1,5 @@
-import { vec_add, vec_sub, vec_mul, vec_magnitude, vec_normalize, translation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity, mat3_chain, newPoint, newVector, vec_div, vec_magnitude_sq, vec_dot } from "./math.js";
+import { vec_add, vec_sub, vec_mul, vec_magnitude, vec_normalize, translation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity, mat3_chain, newPoint, newVector, vec_div, vec_dot } from "./math.js";
+import { Quad, Circle } from "./shapes.js";
 import Transform from "./transform.js";
 const tools = [
     { type: "laser", name: "Laser", hotkey: "l" },
@@ -6,19 +7,13 @@ const tools = [
     { type: "quad", name: "Quad", hotkey: "q" },
     { type: "pan", name: "Pan", hotkey: "p" }
 ];
-/* Transforms a given ray from world space into the local space of the object */
-function transformRay(ray, transform) {
-    return {
-        start: transform.applyInverse(ray.start),
-        direction: transform.applyInverse(ray.direction)
-    };
-}
 const state = {
     lastMousePos: newPoint(0, 0),
     placementStart: null,
     panStart: null,
     tool: "laser",
-    entities: [],
+    lasers: [],
+    shapes: [],
     cameraTransform: mat3_identity(),
     cameraInverseTransform: mat3_identity()
 };
@@ -67,35 +62,38 @@ function p5_draw(p) {
     const minorColor = p.color(100, 100);
     const majorColor = p.color(255);
     drawCoordinates(p, new Transform(), majorColor, minorColor, 100);
-    // Draw entities
-    for (const entity of state.entities) {
-        const hovered = hitTest(entity, newPoint(p.mouseX, p.mouseY));
-        drawEntity(p, entity, hovered);
-    }
+    // Draw preview entities
     let previewLaser = null;
     let previewShape = null;
     if (state.placementStart) {
         const mouse = newPoint(p.mouseX, p.mouseY);
         if (state.tool == "laser") {
             previewLaser = computePreviewLaser(state.placementStart, mouse);
-            drawEntity(p, previewLaser, true);
         }
         else if (state.tool == "quad") {
             previewShape = computePreviewQuad(state.placementStart, mouse);
-            drawEntity(p, previewShape, true);
         }
         else if (state.tool == "circle") {
             previewShape = computePreviewCircle(state.placementStart, mouse);
-            drawEntity(p, previewShape, true);
         }
     }
-    const lasers = state.entities.filter(e => e.type == "laser");
+    const lasers = [...state.lasers];
     if (previewLaser) {
         lasers.push(previewLaser);
     }
-    const shapes = state.entities.filter(e => e.type == "quad" || e.type == "circle");
+    const shapes = [...state.shapes];
     if (previewShape) {
         shapes.push(previewShape);
+    }
+    // Draw lasers including preview laser
+    for (const laser of lasers) {
+        const hovered = hitTestLaser(laser, newPoint(p.mouseX, p.mouseY));
+        drawLaser(p, laser, hovered);
+    }
+    // Draw shapes including preview shape
+    for (const shape of shapes) {
+        const hovered = hitTestShape(shape, newPoint(p.mouseX, p.mouseY));
+        drawShape(p, shape, hovered);
     }
     // Work out the segments to actually draw
     const segments = [];
@@ -106,7 +104,7 @@ function p5_draw(p) {
             direction: vec_normalize(fullDir)
         };
         for (let iReflect = 0; iReflect < 100; iReflect++) {
-            const intersections = shapes.flatMap(s => rayIntersectShape(ray, s));
+            const intersections = shapes.flatMap(shape => shape.intersect(ray).map(t => ({ t, shape })));
             const hit = findHit(intersections);
             if (!hit) {
                 // No intersection: Find end point of line very far along the direction from mouse start to mouse end
@@ -114,8 +112,7 @@ function p5_draw(p) {
                 break;
             }
             const hitPoint = pointOnRay(ray, hit.t);
-            const normalv = normalAt(hit.shape, hitPoint);
-            console.log("normalv: ", normalv);
+            const normalv = hit.shape.normalAt(hitPoint);
             const reflectv = reflect(ray.direction, normalv);
             const overPoint = vec_add(hitPoint, vec_mul(normalv, 0.001));
             segments.push({ start: ray.start, end: hitPoint });
@@ -131,6 +128,9 @@ function p5_draw(p) {
     }
     state.lastMousePos = mouseScreen;
 }
+function pointOnRay(ray, t) {
+    return vec_add(ray.start, vec_mul(ray.direction, t));
+}
 /** The "hit" is the intersection with smallest non-negative t-value
  *  TODO: Keep intersection list sorted while inserting to optimise.
  **/
@@ -142,16 +142,15 @@ function findHit(intersections) {
 function reflect(inVec, normal) {
     return vec_sub(inVec, vec_mul(normal, 2 * vec_dot(inVec, normal)));
 }
-function drawEntity(p, entity, hovered) {
-    switch (entity.type) {
-        case "laser":
-            drawLaser(p, entity, hovered);
-            break;
+function drawShape(p, shape, hovered) {
+    // TODO: Should this be made an abstract method of the `Shape` class?
+    switch (shape.type()) {
         case "quad":
-            drawQuad(p, entity, hovered);
+            drawQuad(p, shape, hovered);
             break;
         case "circle":
-            drawCircle(p, entity, hovered);
+            drawCircle(p, shape, hovered);
+            break;
     }
     p.strokeWeight(1);
 }
@@ -262,15 +261,9 @@ function p5_key_pressed(p) {
     }
 }
 /** Returns true if clicking at the given world point should highlight the entity */
-function hitTest(entity, mouseVec) {
-    switch (entity.type) {
-        case "laser":
-            return hitTestLaser(entity, mouseVec);
-        case "quad":
-            return hitTestMirror(entity, mouseVec);
-        case "circle":
-            return hitTestCircle(entity, mouseVec);
-    }
+function hitTestShape(shape, mouseVec) {
+    const worldPoint = mat3_mul_vec(state.cameraInverseTransform, mouseVec);
+    return shape.hitTest(worldPoint);
 }
 function hitTestLaser(laser, screenPoint) {
     // Transform point from screen to world to local space
@@ -282,30 +275,20 @@ function hitTestLaser(laser, screenPoint) {
     }
     return false;
 }
-function hitTestMirror(mirror, screenPoint) {
-    const world = mat3_mul_vec(state.cameraInverseTransform, screenPoint);
-    const local = mirror.transform.applyInverse(world);
-    return Math.abs(local.y) < 0.1 && Math.abs(local.x) < 1;
-}
-function hitTestCircle(circle, screenPoint) {
-    const world = mat3_mul_vec(state.cameraInverseTransform, screenPoint);
-    const local = circle.transform.applyInverse(world);
-    return vec_magnitude_sq(local) <= 1;
-}
 function p5_mouse_released(p, e) {
     if (e.button == 0) {
         if (state.placementStart) {
             if (state.tool == "laser") {
                 const newLaser = computePreviewLaser(state.placementStart, newPoint(p.mouseX, p.mouseY));
-                state.entities.push(newLaser);
+                state.lasers.push(newLaser);
             }
             else if (state.tool == "quad") {
-                const newMirror = computePreviewQuad(state.placementStart, newPoint(p.mouseX, p.mouseY));
-                state.entities.push(newMirror);
+                const newQuad = computePreviewQuad(state.placementStart, newPoint(p.mouseX, p.mouseY));
+                state.shapes.push(newQuad);
             }
             else if (state.tool == "circle") {
                 const newCircle = computePreviewCircle(state.placementStart, newPoint(p.mouseX, p.mouseY));
-                state.entities.push(newCircle);
+                state.shapes.push(newCircle);
             }
         }
         state.placementStart = null;
@@ -326,10 +309,7 @@ function computePreviewQuad(placementStart, mousePos) {
     transform.scale(s, 1);
     transform.rotate(theta);
     transform.translate(midpoint.x, midpoint.y);
-    return {
-        type: "quad",
-        transform
-    };
+    return new Quad(transform);
 }
 /**
  * Returns the circle (ellipse) that would be placed if the mouse were released after dragging a certain line on the screen.
@@ -344,10 +324,7 @@ function computePreviewCircle(placementStart, mousePos) {
     const transform = new Transform();
     transform.scale(width, height);
     transform.translate(centre.x, centre.y);
-    return {
-        type: "circle",
-        transform
-    };
+    return new Circle(transform);
 }
 function computePreviewLaser(placementStart, mousePos) {
     const end = mat3_mul_vec(state.cameraInverseTransform, mousePos);
@@ -384,75 +361,4 @@ const s = (p) => {
     p.mouseWheel = (e) => p5_mouse_wheel(p, e);
     p.windowResized = () => p5_window_resized(p);
 };
-const sketch = new p5(s);
-function normalAt(shape, point) {
-    // Transform the point into the shape's local space
-    const local = shape.transform.applyInverse(point);
-    console.log("locaPoint: ", local);
-    let localNormal;
-    switch (shape.type) {
-        case "circle":
-            localNormal = normalAtCircle(local);
-            break;
-        case "quad":
-            localNormal = normalAtQuad(local);
-            break;
-    }
-    // Transform normal vector back to world space
-    const worldNormal = shape.transform.applyInverseTranspose(localNormal);
-    worldNormal.w = 0;
-    return vec_normalize(worldNormal);
-}
-function normalAtCircle(point) {
-    return vec_sub(point, newPoint(0, 0));
-}
-/* Actually doing the calculation for a one-sided line segment currently! */
-function normalAtQuad(point) {
-    return newVector(0, 1);
-}
-function rayIntersectShape(ray, shape) {
-    // Transform the ray into the shape's local space.
-    const r = transformRay(ray, shape.transform);
-    let ts;
-    switch (shape.type) {
-        case "circle":
-            ts = rayIntersectCircle(r);
-            break;
-        case "quad":
-            ts = rayIntersectQuad(r);
-            break;
-    }
-    return ts.map(t => ({ t, shape }));
-}
-function rayIntersectCircle(ray) {
-    const sphereToRay = vec_sub(ray.start, newPoint(0, 0)); // Effectively just sets w = 0
-    const a = vec_magnitude_sq(ray.direction);
-    const b = 2 * vec_dot(ray.start, ray.direction);
-    const c = vec_magnitude_sq(sphereToRay) - 1;
-    const disc = b * b - 4 * a * c;
-    if (disc < 0) {
-        return [];
-    }
-    const rootDisc = Math.sqrt(disc);
-    const tlo = (-b - rootDisc) / (2 * a);
-    const thi = (-b + rootDisc) / (2 * a);
-    return [tlo, thi];
-}
-function rayIntersectQuad(ray) {
-    // NOTE: Currently actually the intersection logic for a line segment
-    // In the segment's local space, it's a horizontal line of length 2 centred at the origin.
-    // So we need to find the distance along the ray at which it intersects the x axis.
-    if (ray.direction.x == 0) {
-        return [];
-    }
-    const t = (-ray.start.y / ray.direction.y);
-    const x = ray.start.x + t * ray.direction.x;
-    // ray may have missed the segment
-    if (Math.abs(x) > 1) {
-        return [];
-    }
-    return [t];
-}
-function pointOnRay(ray, t) {
-    return vec_add(ray.start, vec_mul(ray.direction, t));
-}
+new p5(s);
