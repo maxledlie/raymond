@@ -1,4 +1,4 @@
-import { vec_add, vec_sub, vec_mul, vec_magnitude, vec_normalize, translation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity, mat3_chain, newPoint, newVector, vec_div, vec_dot } from "./math.js";
+import { vec_add, vec_sub, vec_mul, vec_normalize, translation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity, mat3_chain, newPoint, newVector, vec_div, vec_dot } from "./math.js";
 import { Quad, Circle } from "./shapes.js";
 import Transform from "./transform.js";
 const tools = [
@@ -184,11 +184,13 @@ function drawQuad(p, quad, hovered) {
         const minorColor = p.color(100, 100, 255, 200);
         drawCoordinates(p, quad.transform, majorColor, minorColor, 2);
     }
-    p.stroke("lightblue");
-    p.strokeWeight(hovered ? 4 : 2);
-    const startWorld = quad.transform.apply(newPoint(-1, 0));
-    const endWorld = quad.transform.apply(newPoint(1, 0));
-    drawLine(p, startWorld, endWorld);
+    p.noStroke();
+    p.fill("lightblue");
+    const topLeftWorld = quad.transform.apply(newPoint(-1, 1));
+    const bottomRightWorld = quad.transform.apply(newPoint(1, -1));
+    const topLeftScreen = mat3_mul_vec(state.cameraTransform, topLeftWorld);
+    const bottomRightScreen = mat3_mul_vec(state.cameraTransform, bottomRightWorld);
+    p.rect(topLeftScreen.x, topLeftScreen.y, bottomRightScreen.x - topLeftScreen.x, bottomRightScreen.y - topLeftScreen.y);
 }
 function drawCircle(p, circle, hovered) {
     if (hovered) {
@@ -297,18 +299,19 @@ function p5_mouse_released(p, e) {
         state.panStart = null;
     }
 }
-/* Returns the mirror that would be placed if the mouse were released after dragging a certain line on the screen */
+/**
+ * Returns the quad that would be placed if the mouse were released after dragging a certain line on the screen.
+ * The quad is that which would fill the axis-aligned bounding box of which the drawn line is the diagonal.
+ **/
 function computePreviewQuad(placementStart, mousePos) {
-    const end = mat3_mul_vec(state.cameraInverseTransform, mousePos);
-    const dir = vec_sub(end, placementStart);
-    const theta = Math.atan2(dir.y, dir.x);
-    const midpoint = vec_mul(vec_add(state.placementStart, end), 0.5);
-    const length = vec_magnitude(vec_sub(end, state.placementStart));
-    const s = length / 2;
+    const endWorld = mat3_mul_vec(state.cameraInverseTransform, mousePos);
+    const startWorld = placementStart;
+    const width = Math.abs(endWorld.x - startWorld.x);
+    const height = Math.abs(endWorld.y - startWorld.y);
+    const centre = vec_div(vec_add(startWorld, endWorld), 2);
     const transform = new Transform();
-    transform.scale(s, 1);
-    transform.rotate(theta);
-    transform.translate(midpoint.x, midpoint.y);
+    transform.scale(width, height);
+    transform.translate(centre.x, centre.y);
     return new Quad(transform);
 }
 /**
