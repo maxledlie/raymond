@@ -16,8 +16,9 @@ export class Shape {
         // Transform point from world space to local space, then normal from local back to world
         const pointLocal = this.transform.applyInverse(pointWorld);
         const normalLocal = this._normalAtLocal(pointLocal);
-        normalLocal.w = 0;
-        return vec_normalize(normalLocal);
+        const normalWorld = this.transform.applyInverseTranspose(normalLocal);
+        normalWorld.w = 0;
+        return vec_normalize(normalWorld);
     }
     hitTest(pointWorld) {
         const pointLocal = this.transform.applyInverse(pointWorld);
