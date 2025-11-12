@@ -26,6 +26,7 @@ interface RaySegment {
 }
 
 interface State {
+    debug: boolean;
     lastMousePos: Vec3;
     placementStart: Vec3 | null;  // In world coordinates
     panStart: Vec3 | null;
@@ -38,6 +39,7 @@ interface State {
 }
 
 const state: State = {
+    debug: false,
     lastMousePos: newPoint(0, 0),
     placementStart: null,
     panStart: null,
@@ -79,16 +81,23 @@ function p5_draw(p: p5) {
     p.fill("white");
     p.noStroke();
 
+    // Draw tool menu
+    p.textAlign(p.LEFT, p.TOP);
     for (let i = 0; i < tools.length; i++ ) {
         const tool = tools[i];
         const text = (state.tool == tool.type ? "> " : "  ") + tool.name + " (" + tool.hotkey.toUpperCase() + ")";
         p.text(text, 10, 20 * (i + 1));
     }
 
-    // Find mouse coordinates
     const mouseScreen = newPoint(p.mouseX, p.mouseY);
     const mouseWorld = mat3_mul_vec(state.cameraInverseTransform, mouseScreen);
-    p.text(`x: ${mouseWorld.x.toFixed(2)}, y: ${mouseWorld.y.toFixed(2)}`, p.width / 2, 20);
+
+    // Draw status indicators
+    p.textAlign(p.RIGHT, p.TOP);
+    p.text(`Debug ${state.debug ? "ON" : "OFF"} (D)`, p.width - 10, 20);
+    if (state.debug) {
+        p.text(`x: ${mouseWorld.x.toFixed(2)}, y: ${mouseWorld.y.toFixed(2)}`, p.width - 10, 40);
+    }
 
     // Handle panning
     if (state.panStart != null) {
@@ -218,7 +227,7 @@ function drawLaser(p: p5, laser: Laser, hovered: boolean) {
     const bottomRight = newPoint(0, 0.1);
     const bottomLeft = newPoint(-0.4, 0.1);
 
-    if (hovered) {
+    if (hovered && state.debug) {
         // Draw local coordinate system of laser
         const minorColor = p.color(0, 100, 0, 100);
         const majorColor = p.color(0, 255, 0, 255);
@@ -238,7 +247,7 @@ function drawLaser(p: p5, laser: Laser, hovered: boolean) {
 }
 
 function drawQuad(p: p5, quad: Quad, hovered: boolean) {
-    if (hovered) {
+    if (hovered && state.debug) {
         const majorColor = p.color(100, 100, 255, 255);
         const minorColor = p.color(100, 100, 255, 200);
         drawCoordinates(p, quad.transform, majorColor, minorColor, 2);
@@ -253,7 +262,7 @@ function drawQuad(p: p5, quad: Quad, hovered: boolean) {
 }
 
 function drawCircle(p: p5, circle: Circle, hovered: boolean) {
-    if (hovered) {
+    if (hovered && state.debug) {
         const majorColor = p.color(100, 100, 255, 255);
         const minorColor = p.color(100, 100, 255, 200);
         drawCoordinates(p, circle.transform, majorColor, minorColor, 2);
@@ -339,12 +348,15 @@ function p5_mouse_pressed(p: p5, e: MouseEvent) {
 }
 
 function p5_key_pressed(p: p5) {
+    if (p.key.toUpperCase() === "D") {
+        state.debug = !state.debug;
+    }
     if (p.keyCode === p.DELETE && state.selectedShapeIndex != null) {
         state.shapes.splice(state.selectedShapeIndex, 1);
         state.selectedShapeIndex = null;
     }
     for (const tool of tools) {
-        if (p.key == tool.hotkey || p.key == tool.hotkey.toUpperCase())  {
+        if (p.key.toUpperCase() === tool.hotkey.toUpperCase())  {
             state.tool = tool.type;
         }
     }
@@ -369,7 +381,7 @@ function hitTestLaser(laser: Laser, screenPoint: Vec3) {
 }
 
 function p5_mouse_released(p: p5, e: MouseEvent) {
-    if (e.button == 0) {
+    if (e.button === 0) {
         if (state.placementStart) {
             if (state.tool == "laser") {
                 const newLaser = computePreviewLaser(state.placementStart, newPoint(p.mouseX, p.mouseY));
@@ -386,6 +398,31 @@ function p5_mouse_released(p: p5, e: MouseEvent) {
     }
     if (e.button == 1 || state.tool == "pan") {
         state.panStart = null;
+    }
+}
+
+function p5_mouse_dragged(p: p5, e: DragEvent) {
+    if (
+        p.mouseButton === p.LEFT &&
+        e.button === 0 &&
+        state.tool === "select" &&
+        state.selectedShapeIndex != null &&
+        state.shapes.length > state.selectedShapeIndex
+    ) {
+        const selectedShape = state.shapes[state.selectedShapeIndex];
+
+        const dragEndScreen = newPoint(e.offsetX, e.offsetY);
+        const dragMovementScreen = newVector(e.movementX, e.movementY);
+        const dragStartScreen = vec_sub(dragEndScreen, dragMovementScreen);
+        const dragEndWorld = mat3_mul_vec(state.cameraInverseTransform, dragEndScreen);
+        const dragStartWorld = mat3_mul_vec(state.cameraInverseTransform, dragStartScreen);
+        
+        if (!selectedShape.hitTest(dragStartWorld)) {
+            return;
+        }
+
+        const dragDelta = vec_sub(dragEndWorld, dragStartWorld);
+        selectedShape.transform.translate(dragDelta.x, dragDelta.y);
     }
 }
 
@@ -462,6 +499,7 @@ const s = (p: p5) => {
     p.mouseReleased = (e: MouseEvent) => p5_mouse_released(p, e);
     p.mouseWheel = (e: WheelEvent) => p5_mouse_wheel(p, e);
     p.windowResized = () => p5_window_resized(p);
+    p.mouseDragged = (e: DragEvent) => p5_mouse_dragged(p, e);
 }
 
 new p5(s);

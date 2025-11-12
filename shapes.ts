@@ -1,4 +1,3 @@
-import { Vector } from "p5";
 import { newPoint, newVector, Vec3, vec_dot, vec_magnitude_sq, vec_normalize, vec_sub } from "./math.js";
 import Transform from "./transform.js";
 import { Ray } from "./types.js";
