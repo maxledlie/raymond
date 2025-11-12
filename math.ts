@@ -1,3 +1,13 @@
+/**
+ * Transpose a 3x3 matrix.
+ */
+export function mat3_transpose(m: Mat3): Mat3 {
+    return [
+        [m[0][0], m[1][0], m[2][0]],
+        [m[0][1], m[1][1], m[2][1]],
+        [m[0][2], m[1][2], m[2][2]]
+    ];
+}
 export interface Vec3 {
     x: number;
     y: number;
