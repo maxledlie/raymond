@@ -1,4 +1,5 @@
-import { vec_add, vec_sub, vec_mul, vec_normalize, translation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity, mat3_chain, newPoint, newVector, vec_div, vec_dot } from "./math.js";
+import Camera from "./camera.js";
+import { vec_add, vec_sub, vec_mul, vec_normalize, newPoint, newVector, vec_div, vec_dot, vec_magnitude } from "./math.js";
 import { Quad, Circle } from "./shapes.js";
 import Transform from "./transform.js";
 const tools = [
@@ -11,81 +12,72 @@ const tools = [
 const state = {
     debug: false,
     lastMousePos: newPoint(0, 0),
-    placementStart: null,
+    isMouseDown: false,
+    placementStartWorld: null,
     panStart: null,
     tool: "laser",
     lasers: [],
     shapes: [],
     selectedShapeIndex: null,
-    cameraTransform: mat3_identity(),
-    cameraInverseTransform: mat3_identity()
+    camera: new Camera(1, 1), // We don't know the screen width and height yet.
+    mousePosScreen: newPoint(0, 0)
 };
-function defaultTransform(screenWidth, screenHeight) {
-    let transform = mat3_identity();
-    // Flip so y axis points upwards and stretch so each unit is much larger than one pixel
-    transform = mat3_mul_mat(scale(100, -100), transform);
-    // Translate so origin is at centre of screen
-    transform = mat3_mul_mat(translation(screenWidth / 2, screenHeight / 2), transform);
-    return transform;
-}
 function p5_setup(p) {
     p.createCanvas(p.windowWidth, p.windowHeight);
-    state.cameraTransform = defaultTransform(p.width, p.height);
-    state.cameraInverseTransform = mat3_inverse(state.cameraTransform);
+    state.camera = new Camera(p.windowWidth, p.windowHeight);
 }
 /** Draws a line described in world space using the current camera transform and p5 drawing state */
-function drawLine(p, start, end) {
-    const startScreen = mat3_mul_vec(state.cameraTransform, start);
-    const endScreen = mat3_mul_vec(state.cameraTransform, end);
-    p.line(startScreen.x, startScreen.y, endScreen.x, endScreen.y);
+function drawLine(ctx, start, end) {
+    const startScreen = state.camera.worldToScreen(start);
+    const endScreen = state.camera.worldToScreen(end);
+    ctx.beginPath();
+    ctx.moveTo(startScreen.x, startScreen.y);
+    ctx.lineTo(endScreen.x, endScreen.y);
+    ctx.stroke();
 }
-function p5_draw(p) {
-    p.background("black");
-    p.stroke("white");
-    p.fill("white");
-    p.noStroke();
+function color(r, g, b, a) {
+    if (a == null) {
+        return `rgb(${r} ${g} ${b})`;
+    }
+    else {
+        return `rgb(${r} ${g} ${b} / ${a * 100 / 255}%)`;
+    }
+}
+function p5_draw(canvas, ctx) {
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     // Draw tool menu
-    p.textAlign(p.LEFT, p.TOP);
+    ctx.fillStyle = "white";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.font = "14px sans serif";
     for (let i = 0; i < tools.length; i++) {
         const tool = tools[i];
         const text = (state.tool == tool.type ? "> " : "  ") + tool.name + " (" + tool.hotkey.toUpperCase() + ")";
-        p.text(text, 10, 20 * (i + 1));
+        ctx.fillText(text, 10, 20 * (i + 1));
     }
-    const mouseScreen = newPoint(p.mouseX, p.mouseY);
-    const mouseWorld = mat3_mul_vec(state.cameraInverseTransform, mouseScreen);
+    const mouseScreen = state.mousePosScreen;
+    const mouseWorld = state.camera.screenToWorld(state.mousePosScreen);
     // Draw status indicators
-    p.textAlign(p.RIGHT, p.TOP);
-    p.text(`Debug ${state.debug ? "ON" : "OFF"} (D)`, p.width - 10, 20);
+    ctx.textAlign = "right";
+    ctx.fillText(`Debug ${state.debug ? "ON" : "OFF"} (D)`, canvas.width - 10, 20);
     if (state.debug) {
-        p.text(`x: ${mouseWorld.x.toFixed(2)}, y: ${mouseWorld.y.toFixed(2)}`, p.width - 10, 40);
+        ctx.fillText(`x: ${mouseWorld.x.toFixed(2)}, y: ${mouseWorld.y.toFixed(2)}`, canvas.width - 10, 40);
     }
     // Handle panning
     if (state.panStart != null) {
-        const panSpeed = 0.5;
         const mouseDelta = vec_sub(mouseScreen, state.lastMousePos);
-        const pan = vec_mul(mouseDelta, panSpeed);
-        state.cameraTransform = mat3_mul_mat(translation(pan.x, pan.y), state.cameraTransform);
-        state.cameraInverseTransform = mat3_inverse(state.cameraTransform);
+        console.log("mouseDelta: ", mouseDelta);
+        state.camera.pan(mouseDelta);
     }
     // Draw coordinate grid
-    const minorColor = p.color(100, 100);
-    const majorColor = p.color(255);
-    drawCoordinates(p, new Transform(), majorColor, minorColor, 100);
+    const minorColor = "rgb(100 100 100 / 30%)";
+    const majorColor = "rgb(255 255 255)";
+    drawCoordinates(ctx, new Transform(), majorColor, minorColor, 100);
     // Draw preview entities
-    let previewLaser = null;
-    let previewShape = null;
-    if (state.placementStart) {
-        const mouse = newPoint(p.mouseX, p.mouseY);
-        if (state.tool == "laser") {
-            previewLaser = computePreviewLaser(state.placementStart, mouse);
-        }
-        else if (state.tool == "quad") {
-            previewShape = computePreviewQuad(state.placementStart, mouse);
-        }
-        else if (state.tool == "circle") {
-            previewShape = computePreviewCircle(state.placementStart, mouse);
-        }
-    }
+    let previewLaser = computePreviewLaser();
+    let previewShape = computePreviewShape();
+    console.log("previewShape: ", previewShape);
     const lasers = [...state.lasers];
     if (previewLaser) {
         lasers.push(previewLaser);
@@ -96,13 +88,13 @@ function p5_draw(p) {
     }
     // Draw lasers including preview laser
     for (const laser of lasers) {
-        const hovered = hitTestLaser(laser, newPoint(p.mouseX, p.mouseY));
-        drawLaser(p, laser, hovered);
+        const hovered = hitTestLaser(laser, state.mousePosScreen);
+        drawLaser(ctx, laser, hovered);
     }
     // Draw shapes including preview shape
     for (const [i, shape] of shapes.entries()) {
-        const hovered = hitTestShape(shape, newPoint(p.mouseX, p.mouseY));
-        drawShape(p, shape, hovered, i === state.selectedShapeIndex);
+        const hovered = hitTestShape(shape, state.mousePosScreen);
+        drawShape(ctx, shape, hovered, i === state.selectedShapeIndex);
     }
     // Work out the segments to actually draw
     const segments = [];
@@ -131,9 +123,9 @@ function p5_draw(p) {
             };
         }
     }
-    p.stroke("yellow");
+    ctx.strokeStyle = "yellow";
     for (const segment of segments) {
-        drawLine(p, segment.start, segment.end);
+        drawLine(ctx, segment.start, segment.end);
     }
     state.lastMousePos = mouseScreen;
 }
@@ -151,26 +143,26 @@ function findHit(intersections) {
 function reflect(inVec, normal) {
     return vec_sub(inVec, vec_mul(normal, 2 * vec_dot(inVec, normal)));
 }
-function drawShape(p, shape, hovered, selected) {
+function drawShape(ctx, shape, hovered, selected) {
     // TODO: Should this be made an abstract method of the `Shape` class?
     if (selected) {
-        p.strokeWeight(2);
-        p.stroke("white");
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "white";
     }
     else {
-        p.noStroke();
+        ctx.lineWidth = 0;
     }
     switch (shape.type()) {
         case "quad":
-            drawQuad(p, shape, hovered);
+            drawQuad(ctx, shape, hovered);
             break;
         case "circle":
-            drawCircle(p, shape, hovered);
+            drawCircle(ctx, shape, hovered);
             break;
     }
-    p.strokeWeight(1);
+    ctx.lineWidth = 1;
 }
-function drawLaser(p, laser, hovered) {
+function drawLaser(ctx, laser, hovered) {
     // Drawing the apparatus as a polygon is probably suboptimal.
     // Maybe I should transform the canvas and use p.rect?
     const topLeft = newPoint(-0.4, -0.1);
@@ -179,90 +171,110 @@ function drawLaser(p, laser, hovered) {
     const bottomLeft = newPoint(-0.4, 0.1);
     if (hovered && state.debug) {
         // Draw local coordinate system of laser
-        const minorColor = p.color(0, 100, 0, 100);
-        const majorColor = p.color(0, 255, 0, 255);
-        drawCoordinates(p, laser.transform, majorColor, minorColor, 2);
+        const minorColor = color(0, 100, 0, 100);
+        const majorColor = color(0, 255, 0, 255);
+        drawCoordinates(ctx, laser.transform, majorColor, minorColor, 2);
     }
-    p.noStroke();
-    p.fill(hovered ? "green" : "white");
-    p.beginShape();
-    for (const vertex of [topLeft, topRight, bottomRight, bottomLeft]) {
-        const world = laser.transform.apply(vertex);
-        const screen = mat3_mul_vec(state.cameraTransform, world);
-        p.vertex(screen.x, screen.y);
+    const points = [topLeft, topRight, bottomRight, bottomLeft].map(p => {
+        const world = laser.transform.apply(p);
+        return state.camera.worldToScreen(world);
+    });
+    ctx.lineWidth = 0;
+    ctx.fillStyle = hovered ? "green" : "white";
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (const p of points.slice(1)) {
+        ctx.lineTo(p.x, p.y);
     }
-    p.endShape();
-    p.stroke(1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.lineWidth = 1;
 }
-function drawQuad(p, quad, hovered) {
+function drawQuad(ctx, quad, hovered) {
     if (hovered && state.debug) {
-        const majorColor = p.color(100, 100, 255, 255);
-        const minorColor = p.color(100, 100, 255, 200);
-        drawCoordinates(p, quad.transform, majorColor, minorColor, 2);
+        const majorColor = color(100, 100, 255, 255);
+        const minorColor = color(100, 100, 255, 200);
+        drawCoordinates(ctx, quad.transform, majorColor, minorColor, 2);
     }
-    p.fill("lightblue");
-    const topLeftWorld = quad.transform.apply(newPoint(-1, 1));
-    const bottomRightWorld = quad.transform.apply(newPoint(1, -1));
-    const topLeftScreen = mat3_mul_vec(state.cameraTransform, topLeftWorld);
-    const bottomRightScreen = mat3_mul_vec(state.cameraTransform, bottomRightWorld);
-    p.rect(topLeftScreen.x, topLeftScreen.y, bottomRightScreen.x - topLeftScreen.x, bottomRightScreen.y - topLeftScreen.y);
+    ctx.fillStyle = "lightblue";
+    const points = [];
+    for (const local of [newPoint(-1, 1), newPoint(1, 1), newPoint(1, -1), newPoint(-1, -1)]) {
+        const world = quad.transform.apply(local);
+        const screen = state.camera.worldToScreen(world);
+        points.push(screen);
+    }
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x, points[i].y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
 }
-function drawCircle(p, circle, hovered) {
+function drawCircle(ctx, circle, hovered) {
     if (hovered && state.debug) {
-        const majorColor = p.color(100, 100, 255, 255);
-        const minorColor = p.color(100, 100, 255, 200);
-        drawCoordinates(p, circle.transform, majorColor, minorColor, 2);
+        const majorColor = color(100, 100, 255, 255);
+        const minorColor = color(100, 100, 255, 200);
+        drawCoordinates(ctx, circle.transform, majorColor, minorColor, 2);
     }
-    p.fill("lightblue");
-    p.ellipseMode(p.CORNERS);
-    const topLeftWorld = circle.transform.apply(newPoint(-1, 1));
-    const bottomRightWorld = circle.transform.apply(newPoint(1, -1));
-    const topLeftScreen = mat3_mul_vec(state.cameraTransform, topLeftWorld);
-    const bottomRightScreen = mat3_mul_vec(state.cameraTransform, bottomRightWorld);
-    p.ellipse(topLeftScreen.x, topLeftScreen.y, bottomRightScreen.x, bottomRightScreen.y);
+    ctx.fillStyle = "lightblue";
+    const centre = state.camera.worldToScreen(circle.transform.apply(newPoint(0, 0)));
+    const radius = state.camera.worldToScreen(circle.transform._scale);
+    // TODO: Subtract camera rotation once this is supported
+    const rotation = circle.transform._rotation;
+    ctx.beginPath();
+    ctx.ellipse(centre.x, centre.y, Math.abs(radius.x), Math.abs(radius.y), rotation, 0, 2 * Math.PI);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fill();
 }
 /**
  * Given a `transform` that maps points from one space to another, draws the coordinates
  * of this new space.
  */
-function drawCoordinates(p, transform, majorColor, minorColor, gridSize) {
-    p.stroke(1);
-    p.stroke(minorColor);
+function drawCoordinates(ctx, transform, majorColor, minorColor, gridSize) {
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = minorColor;
     for (let i = -gridSize; i <= gridSize; i++) {
         const xStartWorld = transform.apply(newPoint(i, -gridSize));
         const xEndWorld = transform.apply(newPoint(i, gridSize));
-        drawLine(p, xStartWorld, xEndWorld);
+        drawLine(ctx, xStartWorld, xEndWorld);
         const yStartWorld = transform.apply(newPoint(-gridSize, i));
         const yEndWorld = transform.apply(newPoint(gridSize, i));
-        drawLine(p, yStartWorld, yEndWorld);
+        drawLine(ctx, yStartWorld, yEndWorld);
     }
-    p.strokeWeight(2);
-    p.stroke(majorColor);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = majorColor;
     const xAxisEndLocal = newPoint(gridSize, 0);
     const yAxisEndLocal = newPoint(0, gridSize);
     const yAxisStartWorld = transform.apply(newPoint(0, -gridSize));
     const yAxisEndWorld = transform.apply(yAxisEndLocal);
     const xAxisStartWorld = transform.apply(newPoint(-gridSize, 0));
     const xAxisEndWorld = transform.apply(xAxisEndLocal);
-    drawLine(p, yAxisStartWorld, yAxisEndWorld);
-    drawLine(p, xAxisStartWorld, xAxisEndWorld);
+    drawLine(ctx, yAxisStartWorld, yAxisEndWorld);
+    drawLine(ctx, xAxisStartWorld, xAxisEndWorld);
     // Arrow heads indicating direction of axes
     const yAxisLeftLocal = vec_add(yAxisEndLocal, newVector(-0.1, -0.1));
     const yAxisRightLocal = vec_add(yAxisEndLocal, newVector(0.1, -0.1));
     const yAxisLeftWorld = transform.apply(yAxisLeftLocal);
     const yAxisRightWorld = transform.apply(yAxisRightLocal);
-    drawLine(p, yAxisEndWorld, yAxisLeftWorld);
-    drawLine(p, yAxisEndWorld, yAxisRightWorld);
+    drawLine(ctx, yAxisEndWorld, yAxisLeftWorld);
+    drawLine(ctx, yAxisEndWorld, yAxisRightWorld);
     const xAxisLeftLocal = vec_add(xAxisEndLocal, newVector(-0.1, 0.1));
     const xAxisRightLocal = vec_add(xAxisEndLocal, newVector(-0.1, -0.1));
     const xAxisLeftWorld = transform.apply(xAxisLeftLocal);
     const xAxisRightWorld = transform.apply(xAxisRightLocal);
-    drawLine(p, xAxisEndWorld, xAxisLeftWorld);
-    drawLine(p, xAxisEndWorld, xAxisRightWorld);
+    drawLine(ctx, xAxisEndWorld, xAxisLeftWorld);
+    drawLine(ctx, xAxisEndWorld, xAxisRightWorld);
 }
-function p5_mouse_pressed(p, e) {
-    const mouseScreen = newPoint(p.mouseX, p.mouseY);
-    const mouseWorld = mat3_mul_vec(state.cameraInverseTransform, mouseScreen);
+function handleMouseDown(e) {
+    if (e.button === 0) {
+        state.isMouseDown = true;
+    }
+    const mouseScreen = state.mousePosScreen;
+    const mouseWorld = state.camera.screenToWorld(mouseScreen);
     if (e.button === 0) {
         if (state.tool === "select") {
             // Select the most-recently-placed object that we are currently hovering over
@@ -273,12 +285,11 @@ function p5_mouse_pressed(p, e) {
                 }
             }
             if (selectionIndex >= 0) {
-                console.log(`Selected shape ${selectionIndex}`);
                 state.selectedShapeIndex = selectionIndex;
             }
         }
         else {
-            state.placementStart = mat3_mul_vec(state.cameraInverseTransform, mouseScreen);
+            state.placementStartWorld = mouseWorld;
         }
     }
     if (e.button === 1 || state.tool === "pan") {
@@ -301,12 +312,12 @@ function p5_key_pressed(p) {
 }
 /** Returns true if clicking at the given world point should highlight the entity */
 function hitTestShape(shape, mouseVec) {
-    const worldPoint = mat3_mul_vec(state.cameraInverseTransform, mouseVec);
+    const worldPoint = state.camera.screenToWorld(mouseVec);
     return shape.hitTest(worldPoint);
 }
 function hitTestLaser(laser, screenPoint) {
     // Transform point from screen to world to local space
-    const world = mat3_mul_vec(state.cameraInverseTransform, screenPoint);
+    const world = state.camera.screenToWorld(screenPoint);
     const local = laser.transform.applyInverse(world);
     // The drawn rectangle is at local coords x in [-40, 0], y in [-10, 10]
     if (local.x >= -0.4 && local.x <= 0 && local.y >= -0.1 && local.y <= 0.1) {
@@ -314,53 +325,48 @@ function hitTestLaser(laser, screenPoint) {
     }
     return false;
 }
-function p5_mouse_released(p, e) {
+function handleMouseUp(e) {
+    state.isMouseDown = false;
     if (e.button === 0) {
-        if (state.placementStart) {
-            if (state.tool == "laser") {
-                const newLaser = computePreviewLaser(state.placementStart, newPoint(p.mouseX, p.mouseY));
-                state.lasers.push(newLaser);
-            }
-            else if (state.tool == "quad") {
-                const newQuad = computePreviewQuad(state.placementStart, newPoint(p.mouseX, p.mouseY));
-                state.shapes.push(newQuad);
-            }
-            else if (state.tool == "circle") {
-                const newCircle = computePreviewCircle(state.placementStart, newPoint(p.mouseX, p.mouseY));
-                state.shapes.push(newCircle);
+        if (state.tool === "laser") {
+            const previewLaser = computePreviewLaser();
+            state.lasers.push(previewLaser);
+        }
+        else {
+            const previewShape = computePreviewShape();
+            if (previewShape) {
+                state.shapes.push(previewShape);
             }
         }
-        state.placementStart = null;
+        state.placementStartWorld = null;
     }
     if (e.button == 1 || state.tool == "pan") {
         state.panStart = null;
     }
 }
-function p5_mouse_dragged(p, e) {
-    if (p.mouseButton === p.LEFT &&
-        e.button === 0 &&
-        state.tool === "select" &&
-        state.selectedShapeIndex != null &&
-        state.shapes.length > state.selectedShapeIndex) {
-        const selectedShape = state.shapes[state.selectedShapeIndex];
-        const dragEndScreen = newPoint(e.offsetX, e.offsetY);
-        const dragMovementScreen = newVector(e.movementX, e.movementY);
-        const dragStartScreen = vec_sub(dragEndScreen, dragMovementScreen);
-        const dragEndWorld = mat3_mul_vec(state.cameraInverseTransform, dragEndScreen);
-        const dragStartWorld = mat3_mul_vec(state.cameraInverseTransform, dragStartScreen);
-        if (!selectedShape.hitTest(dragStartWorld)) {
-            return;
-        }
-        const dragDelta = vec_sub(dragEndWorld, dragStartWorld);
-        selectedShape.transform.translate(dragDelta.x, dragDelta.y);
+function computePreviewShape() {
+    if (!state.placementStartWorld) {
+        return null;
     }
+    // Don't allow placing teeny tiny objects
+    const placementStartScreen = state.camera.worldToScreen(state.placementStartWorld);
+    if (vec_magnitude(vec_sub(placementStartScreen, state.mousePosScreen)) < 5) {
+        return null;
+    }
+    switch (state.tool) {
+        case "quad":
+            return computePreviewQuad(state.placementStartWorld);
+        case "circle":
+            return computePreviewCircle(state.placementStartWorld);
+    }
+    return null;
 }
 /**
  * Returns the quad that would be placed if the mouse were released after dragging a certain line on the screen.
  * The quad is that which would fill the axis-aligned bounding box of which the drawn line is the diagonal.
  **/
-function computePreviewQuad(placementStart, mousePos) {
-    const endWorld = mat3_mul_vec(state.cameraInverseTransform, mousePos);
+function computePreviewQuad(placementStart) {
+    const endWorld = state.camera.screenToWorld(state.mousePosScreen);
     const startWorld = placementStart;
     const width = Math.abs(endWorld.x - startWorld.x);
     const height = Math.abs(endWorld.y - startWorld.y);
@@ -374,51 +380,82 @@ function computePreviewQuad(placementStart, mousePos) {
  * Returns the circle (ellipse) that would be placed if the mouse were released after dragging a certain line on the screen.
  * The sphere is that which would fill the axis-aligned bounding box of which the drawn line is the diagonal.
  */
-function computePreviewCircle(placementStart, mousePos) {
-    const endWorld = mat3_mul_vec(state.cameraInverseTransform, mousePos);
+function computePreviewCircle(placementStart) {
+    const endWorld = state.camera.screenToWorld(state.mousePosScreen);
     const startWorld = placementStart;
     const width = Math.abs(endWorld.x - startWorld.x);
     const height = Math.abs(endWorld.y - startWorld.y);
+    if (Math.min(width, height) === 0) {
+        return null;
+    }
     const centre = vec_div(vec_add(startWorld, endWorld), 2);
     const transform = new Transform();
     transform.scale(width, height);
     transform.translate(centre.x, centre.y);
     return new Circle(transform);
 }
-function computePreviewLaser(placementStart, mousePos) {
-    const end = mat3_mul_vec(state.cameraInverseTransform, mousePos);
-    const dir = vec_sub(end, placementStart);
+function computePreviewLaser() {
+    if (state.placementStartWorld == null || state.tool !== "laser") {
+        return null;
+    }
+    const end = state.camera.screenToWorld(state.mousePosScreen);
+    const dir = vec_sub(end, state.placementStartWorld);
     const theta = Math.atan2(dir.y, dir.x);
     const transform = new Transform();
     transform.rotate(theta);
-    transform.translate(placementStart.x, placementStart.y);
+    transform.translate(state.placementStartWorld.x, state.placementStartWorld.y);
     return {
         type: "laser",
         transform
     };
 }
-function p5_mouse_wheel(p, e) {
+function handleScroll(e) {
     const zoomSpeed = 0.0001;
-    const mouseScreen = newPoint(p.mouseX, p.mouseY);
-    const mouseWorld = mat3_mul_vec(state.cameraInverseTransform, mouseScreen);
-    const trans = translation(mouseWorld.x, mouseWorld.y);
-    const transInv = mat3_inverse(trans);
-    state.cameraTransform = mat3_chain([state.cameraTransform, trans, scale(1 - zoomSpeed * e.deltaY), transInv]);
-    state.cameraInverseTransform = mat3_inverse(state.cameraTransform);
+    const zoomFrac = zoomSpeed * e.deltaY;
+    state.camera.zoom(zoomFrac, state.mousePosScreen);
 }
-function p5_window_resized(p) {
-    p.resizeCanvas(p.windowWidth, p.windowHeight);
-    state.cameraTransform = defaultTransform(p.width, p.height);
-    state.cameraInverseTransform = mat3_inverse(state.cameraTransform);
+function handleResize(canvas) {
+    canvas.width = canvas.getBoundingClientRect().width;
+    canvas.height = canvas.getBoundingClientRect().height;
 }
+function handleMouseMove(e) {
+    // Track mouse position
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    state.mousePosScreen = newPoint(x, y);
+    // Handle drag
+    if (state.isMouseDown &&
+        state.tool === "select" &&
+        state.selectedShapeIndex != null &&
+        state.shapes.length > state.selectedShapeIndex) {
+        const selectedShape = state.shapes[state.selectedShapeIndex];
+        const dragEndScreen = newPoint(e.offsetX, e.offsetY);
+        const dragMovementScreen = newVector(e.movementX, e.movementY);
+        const dragStartScreen = vec_sub(dragEndScreen, dragMovementScreen);
+        const dragEndWorld = state.camera.screenToWorld(dragEndScreen);
+        const dragStartWorld = state.camera.screenToWorld(dragStartScreen);
+        if (!selectedShape.hitTest(dragStartWorld)) {
+            return;
+        }
+        const dragDelta = vec_sub(dragEndWorld, dragStartWorld);
+        selectedShape.transform.translate(dragDelta.x, dragDelta.y);
+    }
+}
+// Get HTML canvas to draw on
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+// Set canvas coordinates equal to pixel coordinates, and do this again on each resize.
+canvas.onresize = (e) => handleResize(canvas);
+handleResize(canvas);
+canvas.onmousemove = (e) => handleMouseMove(e);
+canvas.onmousedown = (e) => handleMouseDown(e);
+canvas.onmouseup = (e) => handleMouseUp(e);
+canvas.onwheel = (e) => handleScroll(e);
 const s = (p) => {
     p.setup = () => p5_setup(p);
-    p.draw = () => p5_draw(p);
+    p.draw = () => p5_draw(canvas, ctx);
     p.keyPressed = () => p5_key_pressed(p);
-    p.mousePressed = (e) => p5_mouse_pressed(p, e);
-    p.mouseReleased = (e) => p5_mouse_released(p, e);
-    p.mouseWheel = (e) => p5_mouse_wheel(p, e);
-    p.windowResized = () => p5_window_resized(p);
-    p.mouseDragged = (e) => p5_mouse_dragged(p, e);
 };
-new p5(s);
+const hiddenDiv = document.getElementById("p5hidden");
+new p5(s, hiddenDiv);
