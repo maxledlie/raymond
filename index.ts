@@ -1,4 +1,5 @@
-import { Vec3, vec_add, vec_sub, vec_mul, vec_normalize, Mat3, translation, mat3_mul_mat, mat3_mul_vec, mat3_inverse, scale, mat3_identity, mat3_chain, newPoint, newVector, vec_div, vec_dot } from "./math.js";
+import Camera from "./camera.js";
+import { Vec3, vec_add, vec_sub, vec_mul, vec_normalize, newPoint, newVector, vec_div, vec_dot } from "./math.js";
 import { Shape, Intersection, Quad, Circle } from "./shapes.js";
 import Transform from "./transform.js";
 import { Ray, Laser } from "./types.js";
@@ -34,9 +35,9 @@ interface State {
     lasers: Laser[];
     shapes: Shape[];
     selectedShapeIndex: number | null;
-    cameraTransform: Mat3;      // Maps points in world space to points on screen space
-    cameraInverseTransform: Mat3;  // Maps points in screen space to points in world space
+    camera: Camera;
 }
+
 
 const state: State = {
     debug: false,
@@ -47,31 +48,19 @@ const state: State = {
     lasers: [],
     shapes: [],
     selectedShapeIndex: null,
-    cameraTransform: mat3_identity(),
-    cameraInverseTransform: mat3_identity()
+    camera: new Camera(1, 1)  // We don't know the screen width and height yet.
 };
 
-function defaultTransform(screenWidth: number, screenHeight: number) {
-    let transform = mat3_identity();
-
-    // Flip so y axis points upwards and stretch so each unit is much larger than one pixel
-    transform = mat3_mul_mat(scale(100, -100), transform);
-
-    // Translate so origin is at centre of screen
-    transform = mat3_mul_mat(translation(screenWidth / 2, screenHeight / 2), transform);
-    return transform;
-}
 
 function p5_setup(p: p5) {
     p.createCanvas(p.windowWidth, p.windowHeight);
-    state.cameraTransform = defaultTransform(p.width, p.height);
-    state.cameraInverseTransform = mat3_inverse(state.cameraTransform);
+    state.camera = new Camera(p.windowWidth, p.windowHeight);
 }
 
 /** Draws a line described in world space using the current camera transform and p5 drawing state */
 function drawLine(p: p5, start: Vec3, end: Vec3) {
-    const startScreen = mat3_mul_vec(state.cameraTransform, start);
-    const endScreen = mat3_mul_vec(state.cameraTransform, end);
+    const startScreen = state.camera.worldToScreen(start);
+    const endScreen = state.camera.worldToScreen(end);
     p.line(startScreen.x, startScreen.y, endScreen.x, endScreen.y);
 }
 
@@ -90,7 +79,7 @@ function p5_draw(p: p5) {
     }
 
     const mouseScreen = newPoint(p.mouseX, p.mouseY);
-    const mouseWorld = mat3_mul_vec(state.cameraInverseTransform, mouseScreen);
+    const mouseWorld = state.camera.screenToWorld(mouseScreen);
 
     // Draw status indicators
     p.textAlign(p.RIGHT, p.TOP);
@@ -101,11 +90,8 @@ function p5_draw(p: p5) {
 
     // Handle panning
     if (state.panStart != null) {
-        const panSpeed = 0.5;
         const mouseDelta = vec_sub(mouseScreen, state.lastMousePos);
-        const pan = vec_mul(mouseDelta, panSpeed);
-        state.cameraTransform = mat3_mul_mat(translation(pan.x, pan.y), state.cameraTransform);
-        state.cameraInverseTransform = mat3_inverse(state.cameraTransform);
+        state.camera.pan(mouseDelta);
     }
 
     // Draw coordinate grid
@@ -239,7 +225,7 @@ function drawLaser(p: p5, laser: Laser, hovered: boolean) {
     p.beginShape();
     for (const vertex of [topLeft, topRight, bottomRight, bottomLeft]) {
         const world = laser.transform.apply(vertex);
-        const screen = mat3_mul_vec(state.cameraTransform, world);
+        const screen = state.camera.worldToScreen(world);
         p.vertex(screen.x, screen.y);
     }
     p.endShape();
@@ -256,8 +242,8 @@ function drawQuad(p: p5, quad: Quad, hovered: boolean) {
     p.fill("lightblue");
     const topLeftWorld = quad.transform.apply(newPoint(-1, 1));
     const bottomRightWorld = quad.transform.apply(newPoint(1, -1));
-    const topLeftScreen = mat3_mul_vec(state.cameraTransform, topLeftWorld);
-    const bottomRightScreen = mat3_mul_vec(state.cameraTransform, bottomRightWorld);
+    const topLeftScreen = state.camera.worldToScreen(topLeftWorld);
+    const bottomRightScreen = state.camera.worldToScreen(bottomRightWorld);
     p.rect(topLeftScreen.x, topLeftScreen.y, bottomRightScreen.x - topLeftScreen.x, bottomRightScreen.y - topLeftScreen.y);
 }
 
@@ -272,8 +258,8 @@ function drawCircle(p: p5, circle: Circle, hovered: boolean) {
     p.ellipseMode(p.CORNERS);
     const topLeftWorld = circle.transform.apply(newPoint(-1, 1));
     const bottomRightWorld = circle.transform.apply(newPoint(1, -1));
-    const topLeftScreen = mat3_mul_vec(state.cameraTransform, topLeftWorld);
-    const bottomRightScreen = mat3_mul_vec(state.cameraTransform, bottomRightWorld);
+    const topLeftScreen = state.camera.worldToScreen(topLeftWorld);
+    const bottomRightScreen = state.camera.worldToScreen(bottomRightWorld);
     p.ellipse(topLeftScreen.x, topLeftScreen.y, bottomRightScreen.x, bottomRightScreen.y);
 }
 
@@ -323,7 +309,7 @@ function drawCoordinates(p: p5, transform: Transform, majorColor: p5.Color, mino
 
 function p5_mouse_pressed(p: p5, e: MouseEvent) {
     const mouseScreen = newPoint(p.mouseX, p.mouseY);
-    const mouseWorld = mat3_mul_vec(state.cameraInverseTransform, mouseScreen);
+    const mouseWorld = state.camera.screenToWorld(mouseScreen);
 
     if (e.button === 0) {
         if (state.tool === "select") {
@@ -339,7 +325,7 @@ function p5_mouse_pressed(p: p5, e: MouseEvent) {
                 state.selectedShapeIndex = selectionIndex;
             }
         } else {
-            state.placementStart = mat3_mul_vec(state.cameraInverseTransform, mouseScreen);
+            state.placementStart = mouseWorld;
         }
     }
     if (e.button === 1 || state.tool === "pan") {
@@ -364,13 +350,13 @@ function p5_key_pressed(p: p5) {
 
 /** Returns true if clicking at the given world point should highlight the entity */
 function hitTestShape(shape: Shape, mouseVec: Vec3): boolean {
-    const worldPoint = mat3_mul_vec(state.cameraInverseTransform, mouseVec);
+    const worldPoint = state.camera.screenToWorld(mouseVec);
     return shape.hitTest(worldPoint);
 }
 
 function hitTestLaser(laser: Laser, screenPoint: Vec3) {
     // Transform point from screen to world to local space
-    const world = mat3_mul_vec(state.cameraInverseTransform, screenPoint);
+    const world = state.camera.screenToWorld(screenPoint);
     const local = laser.transform.applyInverse(world);
 
     // The drawn rectangle is at local coords x in [-40, 0], y in [-10, 10]
@@ -414,8 +400,8 @@ function p5_mouse_dragged(p: p5, e: DragEvent) {
         const dragEndScreen = newPoint(e.offsetX, e.offsetY);
         const dragMovementScreen = newVector(e.movementX, e.movementY);
         const dragStartScreen = vec_sub(dragEndScreen, dragMovementScreen);
-        const dragEndWorld = mat3_mul_vec(state.cameraInverseTransform, dragEndScreen);
-        const dragStartWorld = mat3_mul_vec(state.cameraInverseTransform, dragStartScreen);
+        const dragEndWorld = state.camera.screenToWorld(dragEndScreen);
+        const dragStartWorld = state.camera.screenToWorld(dragStartScreen);
         
         if (!selectedShape.hitTest(dragStartWorld)) {
             return;
@@ -431,7 +417,7 @@ function p5_mouse_dragged(p: p5, e: DragEvent) {
  * The quad is that which would fill the axis-aligned bounding box of which the drawn line is the diagonal.
  **/ 
 function computePreviewQuad(placementStart: Vec3, mousePos: Vec3): Shape {
-    const endWorld = mat3_mul_vec(state.cameraInverseTransform, mousePos);
+    const endWorld = state.camera.screenToWorld(mousePos);
     const startWorld = placementStart;
 
     const width = Math.abs(endWorld.x - startWorld.x);
@@ -449,7 +435,7 @@ function computePreviewQuad(placementStart: Vec3, mousePos: Vec3): Shape {
  * The sphere is that which would fill the axis-aligned bounding box of which the drawn line is the diagonal.
  */
 function computePreviewCircle(placementStart: Vec3, mousePos: Vec3): Circle {
-    const endWorld = mat3_mul_vec(state.cameraInverseTransform, mousePos);
+    const endWorld = state.camera.screenToWorld(mousePos);
     const startWorld = placementStart;
 
     const width = Math.abs(endWorld.x - startWorld.x);
@@ -463,7 +449,7 @@ function computePreviewCircle(placementStart: Vec3, mousePos: Vec3): Circle {
 }
 
 function computePreviewLaser(placementStart: Vec3, mousePos: Vec3): Laser {
-    const end = mat3_mul_vec(state.cameraInverseTransform, mousePos);
+    const end = state.camera.screenToWorld(mousePos);
     const dir = vec_sub(end, placementStart);
     const theta = Math.atan2(dir.y, dir.x);
     const transform = new Transform();
@@ -477,18 +463,13 @@ function computePreviewLaser(placementStart: Vec3, mousePos: Vec3): Laser {
 
 function p5_mouse_wheel(p: p5, e: WheelEvent) {
     const zoomSpeed = 0.0001
+    const zoomFrac = zoomSpeed * e.deltaY;
     const mouseScreen = newPoint(p.mouseX, p.mouseY);
-    const mouseWorld = mat3_mul_vec(state.cameraInverseTransform, mouseScreen);
-    const trans = translation(mouseWorld.x, mouseWorld.y);
-    const transInv = mat3_inverse(trans);
-    state.cameraTransform = mat3_chain([state.cameraTransform, trans, scale(1 - zoomSpeed * e.deltaY), transInv]);
-    state.cameraInverseTransform = mat3_inverse(state.cameraTransform);
+    state.camera.zoom(zoomFrac, mouseScreen);
 }
 
 function p5_window_resized(p: p5) {
     p.resizeCanvas(p.windowWidth, p.windowHeight);
-    state.cameraTransform = defaultTransform(p.width, p.height);
-    state.cameraInverseTransform = mat3_inverse(state.cameraTransform);
 }
 
 const s = (p: p5) => {
