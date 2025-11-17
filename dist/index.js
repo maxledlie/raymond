@@ -19,6 +19,8 @@ const state = {
     lasers: [],
     shapes: [],
     selectedShapeIndex: null,
+    shapeDragged: false,
+    activeHandleIndex: null,
     camera: new Camera(1, 1), // We don't know the screen width and height yet.
     mousePosScreen: newPoint(0, 0)
 };
@@ -142,22 +144,65 @@ function reflect(inVec, normal) {
 }
 function drawShape(ctx, shape, hovered, selected) {
     // TODO: Should this be made an abstract method of the `Shape` class?
-    if (selected) {
-        ctx.lineWidth = 5;
-        ctx.strokeStyle = "white";
-    }
-    else {
-        ctx.lineWidth = 0;
-    }
+    // Draw actual shape
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = selected ? 5 : 0;
     switch (shape.type()) {
         case "quad":
-            drawQuad(ctx, shape, hovered);
+            drawQuad(ctx, shape, hovered, true);
             break;
         case "circle":
             drawCircle(ctx, shape, hovered);
             break;
     }
-    ctx.lineWidth = 1;
+    // Draw annotations if selected
+    if (selected) {
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 1;
+        drawQuad(ctx, shape, false, false);
+        const { rotation, scale } = computeHandles(shape);
+        ctx.beginPath();
+        ctx.moveTo(rotation.position.x, rotation.position.y);
+        ctx.lineTo(rotation.position.x, rotation.position.y);
+        ctx.stroke();
+        ctx.strokeStyle = "black";
+        for (const [i, p] of scale.entries()) {
+            ctx.fillStyle = state.activeHandleIndex === i + 1 ? "green" : "white";
+            ctx.beginPath();
+            ctx.arc(p.position.x, p.position.y, 5, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+        }
+        ctx.fillStyle = state.activeHandleIndex === 0 ? "green" : "white";
+        ctx.beginPath();
+        ctx.arc(rotation.position.x, rotation.position.y, 5, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+    }
+}
+/**
+ * Returns the handles that should be drawn around the given shape, assuming it's selected
+ */
+function computeHandles(shape) {
+    // Handles at each vertex and at the center of each line of the bounding box
+    const handlesLocal = [
+        newPoint(-1, 1),
+        newPoint(0, 1),
+        newPoint(1, 1),
+        newPoint(1, 0),
+        newPoint(1, -1),
+        newPoint(0, -1),
+        newPoint(-1, -1),
+        newPoint(-1, 0)
+    ];
+    const scaleHandlesPos = handlesLocal.map(x => state.camera.worldToScreen(shape.transform.apply(x)));
+    const centreScreen = state.camera.worldToScreen(shape.transform.apply(newPoint(0, 0)));
+    const topScreen = state.camera.worldToScreen(shape.transform.apply(newPoint(0, 1)));
+    const d = vec_normalize(vec_sub(topScreen, centreScreen));
+    const rotationHandlePos = vec_add(topScreen, vec_mul(d, 30));
+    const scale = scaleHandlesPos.map(x => ({ position: x, action: "scale" }));
+    const rotation = { position: rotationHandlePos, action: "rotate" };
+    return { rotation, scale };
 }
 function drawLaser(ctx, laser, hovered) {
     // Drawing the apparatus as a polygon is probably suboptimal.
@@ -188,7 +233,7 @@ function drawLaser(ctx, laser, hovered) {
     ctx.stroke();
     ctx.lineWidth = 1;
 }
-function drawQuad(ctx, quad, hovered) {
+function drawQuad(ctx, quad, hovered, fill) {
     if (hovered && state.debug) {
         const majorColor = color(100, 100, 255, 255);
         const minorColor = color(100, 100, 255, 200);
@@ -207,7 +252,9 @@ function drawQuad(ctx, quad, hovered) {
         ctx.lineTo(points[i].x, points[i].y);
     }
     ctx.closePath();
-    ctx.fill();
+    if (fill) {
+        ctx.fill();
+    }
     ctx.stroke();
 }
 function drawCircle(ctx, circle, hovered) {
@@ -222,7 +269,7 @@ function drawCircle(ctx, circle, hovered) {
     // TODO: Subtract camera rotation once this is supported
     const rotation = circle.transform._rotation;
     ctx.beginPath();
-    ctx.ellipse(centre.x, centre.y, Math.abs(radius.x), Math.abs(radius.y), rotation, 0, 2 * Math.PI);
+    ctx.ellipse(centre.x, centre.y, Math.abs(radius.x), Math.abs(radius.y), -rotation, 0, 2 * Math.PI);
     ctx.closePath();
     ctx.stroke();
     ctx.fill();
@@ -274,6 +321,17 @@ function handleMouseDown(e) {
     const mouseWorld = state.camera.screenToWorld(mouseScreen);
     if (e.button === 0) {
         if (state.tool === "select") {
+            // Activate a handle if one is hovered
+            if (state.selectedShapeIndex != null) {
+                const selectedShape = state.shapes[state.selectedShapeIndex];
+                const { rotation, scale } = computeHandles(selectedShape);
+                for (const [index, handle] of [rotation, ...scale].entries()) {
+                    if (vec_magnitude(vec_sub(handle.position, mouseScreen)) < 10) {
+                        state.activeHandleIndex = index;
+                        break;
+                    }
+                }
+            }
             // Select the most-recently-placed object that we are currently hovering over
             let selectionIndex = -1;
             for (let i = state.shapes.length - 1; i >= 0; i--) {
@@ -283,6 +341,7 @@ function handleMouseDown(e) {
             }
             if (selectionIndex >= 0) {
                 state.selectedShapeIndex = selectionIndex;
+                state.shapeDragged = true;
             }
         }
         else {
@@ -324,6 +383,8 @@ function hitTestLaser(laser, screenPoint) {
 }
 function handleMouseUp(e) {
     state.isMouseDown = false;
+    state.shapeDragged = false;
+    state.activeHandleIndex = null;
     if (e.button === 0) {
         if (state.tool === "laser") {
             const previewLaser = computePreviewLaser();
@@ -422,20 +483,28 @@ function handleMouseMove(e) {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     state.mousePosScreen = newPoint(x, y);
-    // Handle drag
+    // Rotate or scale shape if dragging a handle
+    if (state.selectedShapeIndex != null && state.activeHandleIndex == 0) {
+        // We are rotating the shape. The centre of the shape, top of the shape, and mouse position should be collinear.
+        const shape = state.shapes[state.selectedShapeIndex];
+        const shapeCentreWorld = shape.transform.apply(newPoint(0, 0));
+        const mouseWorld = state.camera.screenToWorld(state.mousePosScreen);
+        const d = vec_sub(mouseWorld, shapeCentreWorld);
+        const theta = Math.atan2(d.y, d.x);
+        shape.transform._rotation = theta - Math.PI / 2;
+    }
+    // Drag selected shape
     if (state.isMouseDown &&
         state.tool === "select" &&
         state.selectedShapeIndex != null &&
-        state.shapes.length > state.selectedShapeIndex) {
+        state.shapes.length > state.selectedShapeIndex &&
+        state.shapeDragged) {
         const selectedShape = state.shapes[state.selectedShapeIndex];
         const dragEndScreen = newPoint(e.offsetX, e.offsetY);
         const dragMovementScreen = newVector(e.movementX, e.movementY);
         const dragStartScreen = vec_sub(dragEndScreen, dragMovementScreen);
         const dragEndWorld = state.camera.screenToWorld(dragEndScreen);
         const dragStartWorld = state.camera.screenToWorld(dragStartScreen);
-        if (!selectedShape.hitTest(dragStartWorld)) {
-            return;
-        }
         const dragDelta = vec_sub(dragEndWorld, dragStartWorld);
         selectedShape.transform.translate(dragDelta.x, dragDelta.y);
     }
