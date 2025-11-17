@@ -22,11 +22,8 @@ const state = {
     camera: new Camera(1, 1), // We don't know the screen width and height yet.
     mousePosScreen: newPoint(0, 0)
 };
-function p5_setup(p) {
-    p.createCanvas(p.windowWidth, p.windowHeight);
-    state.camera = new Camera(p.windowWidth, p.windowHeight);
-}
-/** Draws a line described in world space using the current camera transform and p5 drawing state */
+const FRAMERATE = 60;
+/** Draws a line described in world space using the current camera transform and canvas drawing state */
 function drawLine(ctx, start, end) {
     const startScreen = state.camera.worldToScreen(start);
     const endScreen = state.camera.worldToScreen(end);
@@ -43,14 +40,14 @@ function color(r, g, b, a) {
         return `rgb(${r} ${g} ${b} / ${a * 100 / 255}%)`;
     }
 }
-function p5_draw(canvas, ctx) {
+function draw(canvas, ctx) {
     ctx.fillStyle = "black";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     // Draw tool menu
     ctx.fillStyle = "white";
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
-    ctx.font = "14px sans serif";
+    ctx.font = "14px monospace";
     for (let i = 0; i < tools.length; i++) {
         const tool = tools[i];
         const text = (state.tool == tool.type ? "> " : "  ") + tool.name + " (" + tool.hotkey.toUpperCase() + ")";
@@ -67,7 +64,6 @@ function p5_draw(canvas, ctx) {
     // Handle panning
     if (state.panStart != null) {
         const mouseDelta = vec_sub(mouseScreen, state.lastMousePos);
-        console.log("mouseDelta: ", mouseDelta);
         state.camera.pan(mouseDelta);
     }
     // Draw coordinate grid
@@ -77,7 +73,6 @@ function p5_draw(canvas, ctx) {
     // Draw preview entities
     let previewLaser = computePreviewLaser();
     let previewShape = computePreviewShape();
-    console.log("previewShape: ", previewShape);
     const lasers = [...state.lasers];
     if (previewLaser) {
         lasers.push(previewLaser);
@@ -124,10 +119,12 @@ function p5_draw(canvas, ctx) {
         }
     }
     ctx.strokeStyle = "yellow";
+    ctx.lineWidth = 1.5; // For some reason, a lineWidth of 1 or smaller causes the line to sometimes disappear.
     for (const segment of segments) {
         drawLine(ctx, segment.start, segment.end);
     }
     state.lastMousePos = mouseScreen;
+    setTimeout(() => draw(canvas, ctx), 1000 / FRAMERATE);
 }
 function pointOnRay(ray, t) {
     return vec_add(ray.start, vec_mul(ray.direction, t));
@@ -146,7 +143,7 @@ function reflect(inVec, normal) {
 function drawShape(ctx, shape, hovered, selected) {
     // TODO: Should this be made an abstract method of the `Shape` class?
     if (selected) {
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 5;
         ctx.strokeStyle = "white";
     }
     else {
@@ -296,16 +293,16 @@ function handleMouseDown(e) {
         state.panStart = mouseScreen;
     }
 }
-function p5_key_pressed(p) {
-    if (p.key.toUpperCase() === "D") {
+function handleKeyDown(e) {
+    if (e.key.toUpperCase() === "D") {
         state.debug = !state.debug;
     }
-    if (p.keyCode === p.DELETE && state.selectedShapeIndex != null) {
+    if (e.key === "Delete" && state.selectedShapeIndex != null) {
         state.shapes.splice(state.selectedShapeIndex, 1);
         state.selectedShapeIndex = null;
     }
     for (const tool of tools) {
-        if (p.key.toUpperCase() === tool.hotkey.toUpperCase()) {
+        if (e.key.toUpperCase() === tool.hotkey.toUpperCase()) {
             state.tool = tool.type;
         }
     }
@@ -417,6 +414,7 @@ function handleScroll(e) {
 function handleResize(canvas) {
     canvas.width = canvas.getBoundingClientRect().width;
     canvas.height = canvas.getBoundingClientRect().height;
+    state.camera = new Camera(canvas.width, canvas.height);
 }
 function handleMouseMove(e) {
     // Track mouse position
@@ -446,16 +444,11 @@ function handleMouseMove(e) {
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 // Set canvas coordinates equal to pixel coordinates, and do this again on each resize.
-canvas.onresize = (e) => handleResize(canvas);
+canvas.onresize = () => handleResize(canvas);
 handleResize(canvas);
 canvas.onmousemove = (e) => handleMouseMove(e);
 canvas.onmousedown = (e) => handleMouseDown(e);
 canvas.onmouseup = (e) => handleMouseUp(e);
 canvas.onwheel = (e) => handleScroll(e);
-const s = (p) => {
-    p.setup = () => p5_setup(p);
-    p.draw = () => p5_draw(canvas, ctx);
-    p.keyPressed = () => p5_key_pressed(p);
-};
-const hiddenDiv = document.getElementById("p5hidden");
-new p5(s, hiddenDiv);
+canvas.onkeydown = (e) => handleKeyDown(e);
+draw(canvas, ctx);

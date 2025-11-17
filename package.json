@@ -5,8 +5,5 @@
     "scripts": {
         "build": "tsc",
         "start": "npx live-server ./dist --no-browser"
-    },
-    "devDependencies": {
-        "@types/p5": "^1.7.7"
     }
 }
