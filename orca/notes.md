@@ -1,0 +1,1 @@
+"Time horizon" is tau in the paper.
