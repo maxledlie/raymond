@@ -1,7 +1,6 @@
 import Camera from "./camera.js";
 import { newPoint, newVector, vec_add, vec_mul, vec_normalize, vec_sub } from "./math.js";
-import { computeNewVelocity, computeOrcaLines } from "./orca/Simulator.js";
-import Transform from "./transform.js";
+import { computeOrcaLines } from "./orca/Simulator.js";
 ;
 const state = {
     units: [],
@@ -12,21 +11,18 @@ const state = {
 };
 function unitsAroundCircle() {
     const nUnits = 20;
-    const radius = 4;
     const dTheta = 2 * Math.PI / nUnits;
     const origin = newPoint(0, 0);
     const units = [];
     for (let i = 0; i < nUnits; i++) {
+        const r = 3 + Math.random() * 2;
         const theta = i * dTheta;
-        const vec = newVector(radius * Math.cos(theta), radius * Math.sin(theta));
+        const vec = newVector(r * Math.cos(theta), r * Math.sin(theta));
         const position = vec_add(origin, vec);
         const destination = vec_sub(origin, vec);
         const velocity = newVector(0, 0);
-        // Generate a random color for the unit
-        const r = 55 + Math.random() * 200;
-        const g = 55 + Math.random() * 200;
-        const b = 55 + Math.random() * 200;
-        units.push({ position, destination, velocity, radius: 0.1, speed: 0.001, color: `rgb(${r}, ${g}, ${b})` });
+        const color = i === 0 ? "red" : "lightblue";
+        units.push({ position, destination, velocity, radius: 0.1, speed: 0.001, color });
     }
     return units;
 }
@@ -47,7 +43,6 @@ function draw(canvas, ctx) {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     // Find the new state of all units
     updateSimple(state.units, dt);
-    drawCoordinates(ctx, new Transform(), "rgb(100 100 100 / 80%)", "rgb(100 100 100 / 80%)", 100);
     for (const unit of state.units) {
         // Draw current position
         ctx.fillStyle = unit.color;
@@ -173,35 +168,32 @@ function updateSimple(units, dt) {
     }
     // ORCA magic
     const u0 = units[0];
-    const orcaLines = computeOrcaLines(u0, units.slice(1));
-    ctx.strokeStyle = "red";
-    ctx.fillStyle = "red";
+    const orcaLines = computeOrcaLines(u0, units.slice(1), dt);
+    ctx.strokeStyle = "pink";
+    ctx.fillStyle = "rgb(150 0 0 / 5%)";
     ctx.lineWidth = 2;
     for (let line of orcaLines) {
-        const startWorld = vec_mul(line.point, 1);
-        const endWorld = vec_add(line.point, line.direction);
-        drawLine(ctx, startWorld, endWorld);
-    }
-    if (!state.hasLogged) {
-        for (const line of orcaLines) {
-            const startWorld = vec_mul(line.point, 11);
-            const endWorld = vec_add(line.point, line.direction);
-            console.log("startWorld: ", startWorld);
-            console.log("endWorld: ", endWorld);
+        const directionWorld = line.direction; // A vector parallel to the ORCA line. Which one?
+        const pointWorld = line.point; // An arbitrary point on the ORCA line
+        // A vector perpendicular to the ORCA line. Is this the right one of the two possibilities?
+        const normalWorld = newVector(directionWorld.y, -directionWorld.x);
+        // Draw a very large rect to represent the infinite half plane "blocked off" by this ORCA line
+        const point1World = vec_add(pointWorld, vec_mul(directionWorld, 1000));
+        const point2World = vec_sub(pointWorld, vec_mul(directionWorld, 1000));
+        const point3World = vec_add(point1World, vec_mul(normalWorld, 1000));
+        const point4World = vec_add(point2World, vec_mul(normalWorld, 1000));
+        const points = [point1World, point2World, point3World, point4World].map(x => state.camera.worldToScreen(x));
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (const p of points.slice(1)) {
+            ctx.lineTo(p.x, p.y);
         }
-        state.hasLogged = true;
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
     }
     // Update positions based on velocities
     for (const u of units) {
         u.position = vec_add(u.position, vec_mul(u.velocity, dt));
-    }
-}
-function updateRVO2(units, dt) {
-    for (let i = 0; i < units.length; i++) {
-        // Later, use a KD tree to only find nearby neighbours for efficiency.
-        const neighbours = [...units];
-        neighbours.splice(i, 1);
-        const newVel = computeNewVelocity(units[i], neighbours);
-        units[i].velocity = newVel;
     }
 }
