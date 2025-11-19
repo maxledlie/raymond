@@ -445,6 +445,9 @@ function handleMouseDown(e: MouseEvent) {
     }
 }
 
+function handleDoubleClick(e: MouseEvent) {
+}
+
 function handleKeyDown(e: KeyboardEvent) {
     if (e.key.toUpperCase() === "D") {
         state.debug = !state.debug;
@@ -638,5 +641,6 @@ canvas.onmousedown = (e: MouseEvent) => handleMouseDown(e);
 canvas.onmouseup = (e: MouseEvent) => handleMouseUp(e);
 canvas.onwheel = (e: WheelEvent) => handleScroll(e);
 canvas.onkeydown = (e: KeyboardEvent) => handleKeyDown(e);
+canvas.ondblclick = (e: MouseEvent) => handleDoubleClick(e);
 
 draw(canvas, ctx);

@@ -352,6 +352,8 @@ function handleMouseDown(e) {
         state.panStart = mouseScreen;
     }
 }
+function handleDoubleClick(e) {
+}
 function handleKeyDown(e) {
     if (e.key.toUpperCase() === "D") {
         state.debug = !state.debug;
@@ -520,4 +522,5 @@ canvas.onmousedown = (e) => handleMouseDown(e);
 canvas.onmouseup = (e) => handleMouseUp(e);
 canvas.onwheel = (e) => handleScroll(e);
 canvas.onkeydown = (e) => handleKeyDown(e);
+canvas.ondblclick = (e) => handleDoubleClick(e);
 draw(canvas, ctx);
