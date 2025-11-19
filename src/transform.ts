@@ -31,7 +31,21 @@ export default class Transform {
         this._translation.y += y;
     }
 
-    _matrix(): Mat3 {
+    setMatrix(matrix: Mat3) {
+        const [a, b, tx] = [...matrix[0]];
+        const [c, d, ty] = [...matrix[1]];
+
+        // Extract translation, scale and rotation of new matrix
+        this._rotation = Math.atan2(c, a);
+
+        const scaleX = Math.sqrt(a * a + c * c);
+        const scaleY = (a * d - b * c) / scaleX;
+        this._scale = newVector(scaleX, scaleY);
+
+        this._translation = newVector(tx, ty);
+    }
+
+    getMatrix(): Mat3 {
         return mat3_chain([
             translation(this._translation.x, this._translation.y),
             rotation(this._rotation),
@@ -40,23 +54,23 @@ export default class Transform {
     }
 
     apply(v: Vec3): Vec3 {
-        return mat3_mul_vec(this._matrix(), v);
+        return mat3_mul_vec(this.getMatrix(), v);
     }
 
     applyTranspose(v: Vec3): Vec3 {
-        const mat = this._matrix();
+        const mat = this.getMatrix();
         const transpose = mat3_transpose(mat);
         return mat3_mul_vec(transpose, v);
     }
 
     applyInverse(v: Vec3): Vec3 {
-        const mat = this._matrix();
+        const mat = this.getMatrix();
         const inv = mat3_inverse(mat);
         return inv ? mat3_mul_vec(inv, v) : v;
     }
 
     applyInverseTranspose(v: Vec3): Vec3 {
-        const mat = this._matrix();
+        const mat = this.getMatrix();
         const inv = mat3_inverse(mat);
         if (!inv) {
             return v;
