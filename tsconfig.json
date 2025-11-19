@@ -3,6 +3,6 @@
         "module": "es2015",
         "target": "es2019",
         "noImplicitAny": true,
-        "outDir": "./dist"
+        "outDir": "./dist/src"
     }
 }
