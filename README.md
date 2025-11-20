@@ -1,6 +1,6 @@
 # Raymond
 
-Play with Raymond at [papercuts.rcdis.co](papercuts.rcdis.co).
+Play with Raymond at [raymond.maxledlie.com](raymond.maxledlie.com).
 
 Raymond is a 2D optics simulator. I am building it to help me understand and explain concepts in [ray tracing](https://en.wikipedia.org/wiki/Ray_tracing_(graphics)).
 
@@ -8,5 +8,5 @@ Raymond is a 2D optics simulator. I am building it to help me understand and exp
 
 To run Raymond locally, clone this repo and run `npx tsc` to compile the latest TypeScript code to JavaScript in `./dist`. Then run `npx live-server ./dist --no-browser` and visit `localhost:8080`.
 
-Raymond is a static site, written in TypeScript and the HTML canvas API for draw calls. It is deployed using [Disco](https://disco.cloud/).
+Raymond is a static site, written in TypeScript and the HTML canvas API for draw calls.
 
