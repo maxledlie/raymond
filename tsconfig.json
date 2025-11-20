@@ -3,6 +3,11 @@
         "module": "es2015",
         "target": "es2019",
         "noImplicitAny": true,
-        "outDir": "./dist/src"
-    }
+        "rootDir": "src",
+        "outDir": "dist",
+        "strict": true,
+        "esModuleInterop": true,
+        "types": []
+    },
+    "include": ["src/**/*"]
 }

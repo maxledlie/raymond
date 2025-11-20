@@ -6,6 +6,6 @@ Raymond is a 2D optics simulator. I am building it to help me understand and exp
 
 ![Rays reflecting off rectangular and ellipsoidal objects in a 2D scene](./images/README_splash.png)
 
-To run Raymond locally, clone this repo and run `npm run build` followed by `npm start`, then visit `localhost:8000`.
+To run Raymond locally, clone this site and run `npm run dev`.
 
 Raymond is a static site, written in TypeScript. It uses the HTML canvas API for draw calls and currently has zero dependencies.

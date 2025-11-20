@@ -16,7 +16,7 @@ export default class Camera {
 
     constructor(screenWidth: number, screenHeight: number) {
         this.mat = this._initialTransform(screenWidth, screenHeight);
-        this.inv = mat3_inverse(this.mat);
+        this.inv = mat3_inverse(this.mat) ?? mat3_identity();
     }
 
     _initialTransform(screenWidth: number, screenHeight: number) {
@@ -35,7 +35,7 @@ export default class Camera {
 
     _setMatrix(mat: Mat3) {
         this.mat = mat;
-        this.inv = mat3_inverse(mat);
+        this.inv = mat3_inverse(mat) ?? mat3_identity();
     }
 
     /**
@@ -60,7 +60,7 @@ export default class Camera {
     zoom(fraction: number, invariantPoint: Vec3) {
         const invariantWorld = this.screenToWorld(invariantPoint);
         const trans = translation(invariantWorld.x, invariantWorld.y);
-        const transInv = mat3_inverse(trans);
+        const transInv = mat3_inverse(trans) ?? mat3_identity();
         const newMat = mat3_chain([
             this.mat,
             trans,
