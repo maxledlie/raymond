@@ -1,12 +1,20 @@
 {
     "name": "paper-cuts",
+    "type": "module",
     "version": "0.0.0",
     "description": "Cut and paste.",
     "scripts": {
-        "build": "tsc",
-        "start": "npx live-server ./dist --no-browser"
+        "build": "tsc && cp -t dist/ src/index.html src/index.css",
+        "start": "serve dist",
+        "test": "web-test-runner --puppeteer",
+        "dev": "web-dev-server --watch --open"
     },
     "devDependencies": {
+        "@esm-bundle/chai": "^4.3.4-fix.0",
+        "@types/mocha": "^10.0.10",
+        "@web/dev-server-esbuild": "^1.0.4",
+        "@web/test-runner": "^0.20.2",
+        "@web/test-runner-puppeteer": "^0.18.0",
         "typescript": "^5.9.3"
     }
 }

@@ -567,7 +567,9 @@ function handleMouseUp(e: MouseEvent) {
     if (e.button === 0) {
         if (state.tool === "laser") {
             const previewLaser = computePreviewLaser();
-            state.lasers.push(previewLaser);
+            if (previewLaser) {
+                state.lasers.push(previewLaser);
+            }
         } else {
             const previewShape = computePreviewShape();
             if (previewShape) {
@@ -729,4 +731,4 @@ canvas.onwheel = (e: WheelEvent) => handleScroll(e);
 canvas.onkeydown = (e: KeyboardEvent) => handleKeyDown(e);
 canvas.ondblclick = (e: MouseEvent) => handleDoubleClick(e);
 
-draw(canvas, ctx);
+draw(canvas, ctx!);

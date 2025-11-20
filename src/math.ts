@@ -86,6 +86,17 @@ export function mat3_identity(): Mat3 {
     ];
 }
 
+export function mat3_equal(a: Mat3, b: Mat3) {
+    for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+            if (a[i][j] !== b[i][j]) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 export function translation(tx: number, ty: number): Mat3 {
     return [
         [1, 0, tx],
@@ -146,6 +157,18 @@ export function mat3_chain(matrices: Mat3[]): Mat3 {
     let ret = mat3_identity();
     for (let i = 0; i < matrices.length; i++) {
         ret = mat3_mul_mat(matrices[matrices.length - 1 - i], ret);
+    }
+    return ret;
+}
+
+export function mat3_mul(m: Mat3, scalar: number): Mat3 {
+    const ret = [];
+    for (let i = 0; i < 3; i++) {
+        const row = [];
+        for (let j = 0; j < 3; j++) {
+            row.push(m[i][j] * scalar);
+        }
+        ret.push(row);
     }
     return ret;
 }
