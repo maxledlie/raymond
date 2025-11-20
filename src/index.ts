@@ -1,13 +1,23 @@
 import Camera from "./camera.js";
-import { Vec3, vec_add, vec_sub, vec_mul, vec_normalize, newPoint, newVector, vec_div, vec_dot, vec_magnitude, rotation, scale } from "./math.js";
+import {
+    Vec3,
+    vec_add,
+    vec_sub,
+    vec_mul,
+    vec_normalize,
+    newPoint,
+    newVector,
+    vec_div,
+    vec_dot,
+    vec_magnitude,
+} from "./math.js";
 import { Shape, Intersection, Quad, Circle } from "./shapes.js";
 import Transform from "./transform.js";
 import { Ray, Laser } from "./types.js";
 
-
 type ToolType = "laser" | "quad" | "circle" | "pan" | "select";
 
-interface Tool { 
+interface Tool {
     type: ToolType;
     hotkey: string;
     name: string;
@@ -18,7 +28,7 @@ const tools: Tool[] = [
     { type: "circle", name: "Circle", hotkey: "c" },
     { type: "quad", name: "Quad", hotkey: "q" },
     { type: "pan", name: "Pan", hotkey: "p" },
-    { type: "select", name: "Select", hotkey: "s" }
+    { type: "select", name: "Select", hotkey: "s" },
 ];
 
 interface RaySegment {
@@ -52,7 +62,6 @@ interface State {
     mousePosScreen: Vec3;
 }
 
-
 const state: State = {
     debug: false,
     lastMousePos: newPoint(0, 0),
@@ -65,12 +74,11 @@ const state: State = {
     selectedShapeIndex: null,
     shapeDragged: false,
     activeHandleIndex: null,
-    camera: new Camera(1, 1),  // We don't know the screen width and height yet.
-    mousePosScreen: newPoint(0, 0)
+    camera: new Camera(1, 1), // We don't know the screen width and height yet.
+    mousePosScreen: newPoint(0, 0),
 };
 
 const FRAMERATE = 60;
-
 
 /** Draws a line described in world space using the current camera transform and canvas drawing state */
 function drawLine(ctx: CanvasRenderingContext2D, start: Vec3, end: Vec3) {
@@ -86,12 +94,12 @@ function color(r: number, g: number, b: number, a?: number): string {
     if (a == null) {
         return `rgb(${r} ${g} ${b})`;
     } else {
-        return `rgb(${r} ${g} ${b} / ${a * 100 / 255}%)`
+        return `rgb(${r} ${g} ${b} / ${(a * 100) / 255}%)`;
     }
 }
 
 function draw(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
-    ctx.fillStyle="black";
+    ctx.fillStyle = "black";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Draw tool menu
@@ -99,9 +107,14 @@ function draw(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.font = "14px monospace";
-    for (let i = 0; i < tools.length; i++ ) {
+    for (let i = 0; i < tools.length; i++) {
         const tool = tools[i];
-        const text = (state.tool == tool.type ? "> " : "  ") + tool.name + " (" + tool.hotkey.toUpperCase() + ")";
+        const text =
+            (state.tool == tool.type ? "> " : "  ") +
+            tool.name +
+            " (" +
+            tool.hotkey.toUpperCase() +
+            ")";
         ctx.fillText(text, 10, 20 * (i + 1));
     }
 
@@ -110,9 +123,17 @@ function draw(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
 
     // Draw status indicators
     ctx.textAlign = "right";
-    ctx.fillText(`Debug ${state.debug ? "ON" : "OFF"} (D)`, canvas.width - 10, 20);
+    ctx.fillText(
+        `Debug ${state.debug ? "ON" : "OFF"} (D)`,
+        canvas.width - 10,
+        20
+    );
     if (state.debug) {
-        ctx.fillText(`x: ${mouseWorld.x.toFixed(2)}, y: ${mouseWorld.y.toFixed(2)}`, canvas.width - 10, 40);
+        ctx.fillText(
+            `x: ${mouseWorld.x.toFixed(2)}, y: ${mouseWorld.y.toFixed(2)}`,
+            canvas.width - 10,
+            40
+        );
     }
 
     // Handle panning
@@ -154,33 +175,41 @@ function draw(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
     // Work out the segments to actually draw
     const segments: RaySegment[] = [];
     for (const laser of lasers) {
-        const fullDir = vec_sub(laser.transform.apply(newPoint(1, 0)), laser.transform.apply(newPoint(0, 0)));
+        const fullDir = vec_sub(
+            laser.transform.apply(newPoint(1, 0)),
+            laser.transform.apply(newPoint(0, 0))
+        );
         let ray = {
             start: laser.transform.apply(newPoint(0, 0)),
-            direction: vec_normalize(fullDir)
+            direction: vec_normalize(fullDir),
         };
         for (let iReflect = 0; iReflect < 100; iReflect++) {
-            const intersections = shapes.flatMap(shape => shape.intersect(ray).map(t => ({ t, shape })));
+            const intersections = shapes.flatMap((shape) =>
+                shape.intersect(ray).map((t) => ({ t, shape }))
+            );
             const hit = findHit(intersections);
             if (!hit) {
                 // No intersection: Find end point of line very far along the direction from mouse start to mouse end
-                segments.push({ start: ray.start, end: pointOnRay(ray, 10000) });
+                segments.push({
+                    start: ray.start,
+                    end: pointOnRay(ray, 10000),
+                });
                 break;
             }
             const hitPoint = pointOnRay(ray, hit.t);
             const normalv = hit.shape.normalAt(hitPoint);
-            const reflectv = reflect(ray.direction, normalv)
+            const reflectv = reflect(ray.direction, normalv);
             const overPoint = vec_add(hitPoint, vec_mul(normalv, 0.001));
             segments.push({ start: ray.start, end: hitPoint });
             ray = {
                 start: overPoint,
-                direction: reflectv
+                direction: reflectv,
             };
         }
     }
 
     ctx.strokeStyle = "yellow";
-    ctx.lineWidth = 1.5;  // For some reason, a lineWidth of 1 or smaller causes the line to sometimes disappear.
+    ctx.lineWidth = 1.5; // For some reason, a lineWidth of 1 or smaller causes the line to sometimes disappear.
     for (const segment of segments) {
         drawLine(ctx, segment.start, segment.end);
     }
@@ -198,14 +227,19 @@ function pointOnRay(ray: Ray, t: number): Vec3 {
  **/
 function findHit(intersections: Intersection[]): Intersection | null {
     const sorted = intersections.sort((a, b) => a.t - b.t);
-    return sorted.find(x => x.t >= 0) ?? null;
+    return sorted.find((x) => x.t >= 0) ?? null;
 }
 
 function reflect(inVec: Vec3, normal: Vec3) {
-    return vec_sub(inVec, vec_mul(normal, 2 * vec_dot(inVec, normal)))
+    return vec_sub(inVec, vec_mul(normal, 2 * vec_dot(inVec, normal)));
 }
 
-function drawShape(ctx: CanvasRenderingContext2D, shape: Shape, hovered: boolean, selected: boolean) {
+function drawShape(
+    ctx: CanvasRenderingContext2D,
+    shape: Shape,
+    hovered: boolean,
+    selected: boolean
+) {
     // TODO: Should this be made an abstract method of the `Shape` class?
 
     // Draw actual shape
@@ -234,7 +268,8 @@ function drawShape(ctx: CanvasRenderingContext2D, shape: Shape, hovered: boolean
         ctx.stroke();
         ctx.strokeStyle = "black";
         for (const [i, p] of scale.entries()) {
-            ctx.fillStyle = state.activeHandleIndex === i + 1 ? "green" : "white";
+            ctx.fillStyle =
+                state.activeHandleIndex === i + 1 ? "green" : "white";
             ctx.beginPath();
             ctx.arc(p.position.x, p.position.y, 5, 0, 2 * Math.PI);
             ctx.fill();
@@ -252,7 +287,7 @@ function drawShape(ctx: CanvasRenderingContext2D, shape: Shape, hovered: boolean
 /**
  * Returns the handles that should be drawn around the given shape, assuming it's selected
  */
-function computeHandles(shape: Shape): { rotation: Handle, scale: Handle[] } {
+function computeHandles(shape: Shape): { rotation: Handle; scale: Handle[] } {
     // Handles at each vertex and at the center of each line of the bounding box
     const handlesLocal = [
         newPoint(-1, 1),
@@ -262,23 +297,35 @@ function computeHandles(shape: Shape): { rotation: Handle, scale: Handle[] } {
         newPoint(1, -1),
         newPoint(0, -1),
         newPoint(-1, -1),
-        newPoint(-1, 0)
+        newPoint(-1, 0),
     ];
 
-    const scaleHandlesPos = handlesLocal.map(x => state.camera.worldToScreen(shape.transform.apply(x)));
+    const scaleHandlesPos = handlesLocal.map((x) =>
+        state.camera.worldToScreen(shape.transform.apply(x))
+    );
 
-    const centreScreen = state.camera.worldToScreen(shape.transform.apply(newPoint(0, 0)));
-    const topScreen = state.camera.worldToScreen(shape.transform.apply(newPoint(0, 1)));
+    const centreScreen = state.camera.worldToScreen(
+        shape.transform.apply(newPoint(0, 0))
+    );
+    const topScreen = state.camera.worldToScreen(
+        shape.transform.apply(newPoint(0, 1))
+    );
     const d = vec_normalize(vec_sub(topScreen, centreScreen));
     const rotationHandlePos = vec_add(topScreen, vec_mul(d, 30));
 
-    const scale: Handle[] = scaleHandlesPos.map(x => ({ position: x, action: "scale" }));
+    const scale: Handle[] = scaleHandlesPos.map((x) => ({
+        position: x,
+        action: "scale",
+    }));
     const rotation: Handle = { position: rotationHandlePos, action: "rotate" };
     return { rotation, scale };
 }
 
-
-function drawLaser(ctx: CanvasRenderingContext2D, laser: Laser, hovered: boolean) {
+function drawLaser(
+    ctx: CanvasRenderingContext2D,
+    laser: Laser,
+    hovered: boolean
+) {
     // Drawing the apparatus as a polygon is probably suboptimal.
     // Maybe I should transform the canvas and use p.rect?
     const topLeft = newPoint(-0.4, -0.1);
@@ -293,7 +340,7 @@ function drawLaser(ctx: CanvasRenderingContext2D, laser: Laser, hovered: boolean
         drawCoordinates(ctx, laser.transform, majorColor, minorColor, 2);
     }
 
-    const points = [topLeft, topRight, bottomRight, bottomLeft].map(p => {
+    const points = [topLeft, topRight, bottomRight, bottomLeft].map((p) => {
         const world = laser.transform.apply(p);
         return state.camera.worldToScreen(world);
     });
@@ -311,7 +358,12 @@ function drawLaser(ctx: CanvasRenderingContext2D, laser: Laser, hovered: boolean
     ctx.lineWidth = 1;
 }
 
-function drawQuad(ctx: CanvasRenderingContext2D, quad: Quad, hovered: boolean, fill: boolean) {
+function drawQuad(
+    ctx: CanvasRenderingContext2D,
+    quad: Quad,
+    hovered: boolean,
+    fill: boolean
+) {
     if (hovered && state.debug) {
         const majorColor = color(100, 100, 255, 255);
         const minorColor = color(100, 100, 255, 200);
@@ -320,7 +372,12 @@ function drawQuad(ctx: CanvasRenderingContext2D, quad: Quad, hovered: boolean, f
 
     ctx.fillStyle = "lightblue";
     const points = [];
-    for (const local of [newPoint(-1, 1), newPoint(1, 1), newPoint(1, -1), newPoint(-1, -1)]) {
+    for (const local of [
+        newPoint(-1, 1),
+        newPoint(1, 1),
+        newPoint(1, -1),
+        newPoint(-1, -1),
+    ]) {
         const world = quad.transform.apply(local);
         const screen = state.camera.worldToScreen(world);
         points.push(screen);
@@ -338,7 +395,11 @@ function drawQuad(ctx: CanvasRenderingContext2D, quad: Quad, hovered: boolean, f
     ctx.stroke();
 }
 
-function drawCircle(ctx: CanvasRenderingContext2D, circle: Circle, hovered: boolean) {
+function drawCircle(
+    ctx: CanvasRenderingContext2D,
+    circle: Circle,
+    hovered: boolean
+) {
     if (hovered && state.debug) {
         const majorColor = color(100, 100, 255, 255);
         const minorColor = color(100, 100, 255, 200);
@@ -346,14 +407,24 @@ function drawCircle(ctx: CanvasRenderingContext2D, circle: Circle, hovered: bool
     }
 
     ctx.fillStyle = "lightblue";
-    const centre = state.camera.worldToScreen(circle.transform.apply(newPoint(0, 0)));
+    const centre = state.camera.worldToScreen(
+        circle.transform.apply(newPoint(0, 0))
+    );
     const radius = state.camera.worldToScreen(circle.transform._scale);
-    
+
     // TODO: Subtract camera rotation once this is supported
     const rotation = circle.transform._rotation;
 
     ctx.beginPath();
-    ctx.ellipse(centre.x, centre.y, Math.abs(radius.x), Math.abs(radius.y), -rotation, 0, 2 * Math.PI);
+    ctx.ellipse(
+        centre.x,
+        centre.y,
+        Math.abs(radius.x),
+        Math.abs(radius.y),
+        -rotation,
+        0,
+        2 * Math.PI
+    );
     ctx.closePath();
     ctx.stroke();
     ctx.fill();
@@ -363,7 +434,13 @@ function drawCircle(ctx: CanvasRenderingContext2D, circle: Circle, hovered: bool
  * Given a `transform` that maps points from one space to another, draws the coordinates
  * of this new space.
  */
-function drawCoordinates(ctx: CanvasRenderingContext2D, transform: Transform, majorColor: string, minorColor: string, gridSize: number) {
+function drawCoordinates(
+    ctx: CanvasRenderingContext2D,
+    transform: Transform,
+    majorColor: string,
+    minorColor: string,
+    gridSize: number
+) {
     ctx.lineWidth = 1;
     ctx.strokeStyle = minorColor;
     for (let i = -gridSize; i <= gridSize; i++) {
@@ -418,7 +495,10 @@ function handleMouseDown(e: MouseEvent) {
                 const selectedShape = state.shapes[state.selectedShapeIndex];
                 const { rotation, scale } = computeHandles(selectedShape);
                 for (const [index, handle] of [rotation, ...scale].entries()) {
-                    if (vec_magnitude(vec_sub(handle.position, mouseScreen)) < 10) {
+                    if (
+                        vec_magnitude(vec_sub(handle.position, mouseScreen)) <
+                        10
+                    ) {
                         state.activeHandleIndex = index;
                         break;
                     }
@@ -445,8 +525,7 @@ function handleMouseDown(e: MouseEvent) {
     }
 }
 
-function handleDoubleClick(e: MouseEvent) {
-}
+function handleDoubleClick(e: MouseEvent) {}
 
 function handleKeyDown(e: KeyboardEvent) {
     if (e.key.toUpperCase() === "D") {
@@ -457,7 +536,7 @@ function handleKeyDown(e: KeyboardEvent) {
         state.selectedShapeIndex = null;
     }
     for (const tool of tools) {
-        if (e.key.toUpperCase() === tool.hotkey.toUpperCase())  {
+        if (e.key.toUpperCase() === tool.hotkey.toUpperCase()) {
             state.tool = tool.type;
         }
     }
@@ -508,8 +587,12 @@ function computePreviewShape(): Shape | null {
     }
 
     // Don't allow placing teeny tiny objects
-    const placementStartScreen = state.camera.worldToScreen(state.placementStartWorld);
-    if (vec_magnitude(vec_sub(placementStartScreen, state.mousePosScreen)) < 5) {
+    const placementStartScreen = state.camera.worldToScreen(
+        state.placementStartWorld
+    );
+    if (
+        vec_magnitude(vec_sub(placementStartScreen, state.mousePosScreen)) < 5
+    ) {
         return null;
     }
 
@@ -522,10 +605,10 @@ function computePreviewShape(): Shape | null {
     return null;
 }
 
-/** 
+/**
  * Returns the quad that would be placed if the mouse were released after dragging a certain line on the screen.
  * The quad is that which would fill the axis-aligned bounding box of which the drawn line is the diagonal.
- **/ 
+ **/
 function computePreviewQuad(placementStart: Vec3): Shape | null {
     const endWorld = state.camera.screenToWorld(state.mousePosScreen);
     const startWorld = placementStart;
@@ -571,15 +654,18 @@ function computePreviewLaser(): Laser | null {
     const theta = Math.atan2(dir.y, dir.x);
     const transform = new Transform();
     transform.rotate(theta);
-    transform.translate(state.placementStartWorld.x, state.placementStartWorld.y);
+    transform.translate(
+        state.placementStartWorld.x,
+        state.placementStartWorld.y
+    );
     return {
         type: "laser",
-        transform
+        transform,
     };
 }
 
 function handleScroll(e: WheelEvent) {
-    const zoomSpeed = 0.0001
+    const zoomSpeed = 0.0001;
     const zoomFrac = zoomSpeed * e.deltaY;
     state.camera.zoom(zoomFrac, state.mousePosScreen);
 }

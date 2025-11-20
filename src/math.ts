@@ -5,7 +5,7 @@ export function mat3_transpose(m: Mat3): Mat3 {
     return [
         [m[0][0], m[1][0], m[2][0]],
         [m[0][1], m[1][1], m[2][1]],
-        [m[0][2], m[1][2], m[2][2]]
+        [m[0][2], m[1][2], m[2][2]],
     ];
 }
 export interface Vec3 {
@@ -59,15 +59,21 @@ export function vec_dot(a: Vec3, b: Vec3): number {
 
 export function mat2_mul(a: Mat2, scalar: number): Mat2 {
     return [
-        [ a[0][0] * scalar, a[0][1] * scalar ],
-        [ a[1][0] * scalar, a[1][1] * scalar ]
+        [a[0][0] * scalar, a[0][1] * scalar],
+        [a[1][0] * scalar, a[1][1] * scalar],
     ];
 }
 
 export function mat2_mul_mat2(a: Mat2, b: Mat2): Mat2 {
     return [
-        [ a[0][0] * b[0][0] + a[0][1] * b[1][0], a[0][0] * b[0][1] + a[0][1] * b[1][1] ],
-        [ a[1][0] * b[0][0] + a[1][1] * b[1][0], a[1][0] * b[0][1] + a[1][1] * b[1][1] ]
+        [
+            a[0][0] * b[0][0] + a[0][1] * b[1][0],
+            a[0][0] * b[0][1] + a[0][1] * b[1][1],
+        ],
+        [
+            a[1][0] * b[0][0] + a[1][1] * b[1][0],
+            a[1][0] * b[0][1] + a[1][1] * b[1][1],
+        ],
     ];
 }
 
@@ -76,7 +82,7 @@ export function mat3_identity(): Mat3 {
     return [
         [1, 0, 0],
         [0, 1, 0],
-        [0, 0, 1]
+        [0, 0, 1],
     ];
 }
 
@@ -84,7 +90,7 @@ export function translation(tx: number, ty: number): Mat3 {
     return [
         [1, 0, tx],
         [0, 1, ty],
-        [0, 0, 1]
+        [0, 0, 1],
     ];
 }
 
@@ -93,17 +99,17 @@ export function rotation(theta: number): Mat3 {
     const s = Math.sin(theta);
     return [
         [c, -s, 0],
-        [s,  c, 0],
-        [0,  0, 1]
+        [s, c, 0],
+        [0, 0, 1],
     ];
 }
 
 export function scale(sx: number, sy?: number): Mat3 {
-    const _sy = (typeof sy === 'number') ? sy : sx;
+    const _sy = typeof sy === "number" ? sy : sx;
     return [
-        [sx, 0,  0],
-        [0,  _sy, 0],
-        [0,  0,  1]
+        [sx, 0, 0],
+        [0, _sy, 0],
+        [0, 0, 1],
     ];
 }
 
@@ -112,14 +118,18 @@ export function scale(sx: number, sy?: number): Mat3 {
  */
 export function shear(shx: number, shy: number): Mat3 {
     return [
-        [1,  shx, 0],
-        [shy, 1,  0],
-        [0,   0,  1]
+        [1, shx, 0],
+        [shy, 1, 0],
+        [0, 0, 1],
     ];
 }
 
 export function mat3_mul_mat(a: Mat3, b: Mat3): Mat3 {
-    const res: Mat3 = [ [0,0,0], [0,0,0], [0,0,0] ];
+    const res: Mat3 = [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+    ];
     for (let i = 0; i < 3; i++) {
         for (let j = 0; j < 3; j++) {
             let v = 0;
@@ -156,9 +166,15 @@ export function mat3_mul_vec(m: Mat3, v: Vec3): Vec3 {
  */
 export function mat3_inverse(m: Mat3): Mat3 | undefined {
     // Compute the determinant
-    const a00 = m[0][0], a01 = m[0][1], a02 = m[0][2];
-    const a10 = m[1][0], a11 = m[1][1], a12 = m[1][2];
-    const a20 = m[2][0], a21 = m[2][1], a22 = m[2][2];
+    const a00 = m[0][0],
+        a01 = m[0][1],
+        a02 = m[0][2];
+    const a10 = m[1][0],
+        a11 = m[1][1],
+        a12 = m[1][2];
+    const a20 = m[2][0],
+        a21 = m[2][1],
+        a22 = m[2][2];
 
     const det =
         a00 * (a11 * a22 - a12 * a21) -
@@ -170,22 +186,22 @@ export function mat3_inverse(m: Mat3): Mat3 | undefined {
     const invDet = 1 / det;
 
     // Compute adjugate (transpose of cofactor matrix)
-    const b00 =  (a11 * a22 - a12 * a21) * invDet;
+    const b00 = (a11 * a22 - a12 * a21) * invDet;
     const b01 = -(a01 * a22 - a02 * a21) * invDet;
-    const b02 =  (a01 * a12 - a02 * a11) * invDet;
+    const b02 = (a01 * a12 - a02 * a11) * invDet;
 
     const b10 = -(a10 * a22 - a12 * a20) * invDet;
-    const b11 =  (a00 * a22 - a02 * a20) * invDet;
+    const b11 = (a00 * a22 - a02 * a20) * invDet;
     const b12 = -(a00 * a12 - a02 * a10) * invDet;
 
-    const b20 =  (a10 * a21 - a11 * a20) * invDet;
+    const b20 = (a10 * a21 - a11 * a20) * invDet;
     const b21 = -(a00 * a21 - a01 * a20) * invDet;
-    const b22 =  (a00 * a11 - a01 * a10) * invDet;
+    const b22 = (a00 * a11 - a01 * a10) * invDet;
 
     return [
         [b00, b01, b02],
         [b10, b11, b12],
-        [b20, b21, b22]
+        [b20, b21, b22],
     ];
 }
 
@@ -195,8 +211,8 @@ export function mat_inverse(m: Mat2): Mat2 | undefined {
         return undefined;
     }
     const a: Mat2 = [
-        [ m[1][1], -m[0][1] ],
-        [ -m[1][0], m[0][0] ]
+        [m[1][1], -m[0][1]],
+        [-m[1][0], m[0][0]],
     ];
     return mat2_mul(a, 1 / det);
 }

@@ -1,9 +1,16 @@
-import { newPoint, newVector, Vec3, vec_dot, vec_magnitude_sq, vec_normalize, vec_sub } from "./math.js";
+import {
+    newPoint,
+    newVector,
+    Vec3,
+    vec_dot,
+    vec_magnitude_sq,
+    vec_normalize,
+    vec_sub,
+} from "./math.js";
 import Transform from "./transform.js";
 import { Ray } from "./types.js";
 
 const EPS = 0.00001;
-    
 
 export interface Intersection {
     t: number;
@@ -13,7 +20,7 @@ export interface Intersection {
 export type ShapeType = "quad" | "circle";
 
 export abstract class Shape {
-    transform: Transform
+    transform: Transform;
 
     constructor(transform: Transform) {
         this.transform = transform;
@@ -34,7 +41,7 @@ export abstract class Shape {
         // Transform the ray to the shape's local space
         const rayLocal: Ray = {
             start: this.transform.applyInverse(ray.start),
-            direction: this.transform.applyInverse(ray.direction)
+            direction: this.transform.applyInverse(ray.direction),
         };
         return this._intersectLocal(rayLocal);
     }
@@ -60,7 +67,7 @@ export class Circle extends Shape {
     }
 
     _intersectLocal(ray: Ray): number[] {
-        const sphereToRay = vec_sub(ray.start, newPoint(0, 0))  // Effectively just sets w = 0
+        const sphereToRay = vec_sub(ray.start, newPoint(0, 0)); // Effectively just sets w = 0
         const a = vec_magnitude_sq(ray.direction);
         const b = 2 * vec_dot(ray.start, ray.direction);
         const c = vec_magnitude_sq(sphereToRay) - 1;
@@ -91,9 +98,9 @@ export class Quad extends Shape {
     }
 
     _checkAxis(start: number, direction: number): number[] {
-        const tminNumerator = (-1 - start);
-        const tmaxNumerator = (+1 - start);
-        
+        const tminNumerator = -1 - start;
+        const tmaxNumerator = +1 - start;
+
         let tmin, tmax;
         if (Math.abs(direction) >= EPS) {
             tmin = tminNumerator / direction;
@@ -108,7 +115,7 @@ export class Quad extends Shape {
             tmax = tmin;
             tmin = temp;
         }
-        return [tmin, tmax]
+        return [tmin, tmax];
     }
 
     _intersectLocal(ray: Ray): number[] {

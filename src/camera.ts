@@ -1,4 +1,14 @@
-import { Mat3, mat3_chain, mat3_identity, mat3_inverse, mat3_mul_mat, mat3_mul_vec, scale, translation, Vec3} from "./math.js";
+import {
+    Mat3,
+    mat3_chain,
+    mat3_identity,
+    mat3_inverse,
+    mat3_mul_mat,
+    mat3_mul_vec,
+    scale,
+    translation,
+    Vec3,
+} from "./math.js";
 
 export default class Camera {
     mat: Mat3;
@@ -16,7 +26,10 @@ export default class Camera {
         transform = mat3_mul_mat(scale(100, -100), transform);
 
         // Translate so origin is at centre of screen
-        transform = mat3_mul_mat(translation(screenWidth / 2, screenHeight / 2), transform);
+        transform = mat3_mul_mat(
+            translation(screenWidth / 2, screenHeight / 2),
+            transform
+        );
         return transform;
     }
 
@@ -48,7 +61,12 @@ export default class Camera {
         const invariantWorld = this.screenToWorld(invariantPoint);
         const trans = translation(invariantWorld.x, invariantWorld.y);
         const transInv = mat3_inverse(trans);
-        const newMat = mat3_chain([this.mat, trans, scale(1 - fraction), transInv]);
+        const newMat = mat3_chain([
+            this.mat,
+            trans,
+            scale(1 - fraction),
+            transInv,
+        ]);
         this._setMatrix(newMat);
     }
 
