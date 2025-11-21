@@ -4,7 +4,7 @@
     "version": "0.0.0",
     "description": "Cut and paste.",
     "scripts": {
-        "build": "tsc && cp -t dist/ src/index.html src/index.css",
+        "build": "tsc && cp -t dist/ src/index.html src/index.css && sed -i 's/index.ts/index.js/' dist/index.html",
         "start": "serve dist",
         "test": "web-test-runner --puppeteer",
         "dev": "web-dev-server --watch --open"
