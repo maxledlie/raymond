@@ -1,20 +1,31 @@
 {
-    "name": "paper-cuts",
-    "type": "module",
-    "version": "0.0.0",
-    "description": "Cut and paste.",
-    "scripts": {
-        "build": "tsc && cp -t dist/ src/index.html src/index.css && sed -i 's/index.ts/index.js/' dist/index.html",
-        "start": "serve dist",
-        "test": "web-test-runner --puppeteer",
-        "dev": "web-dev-server --watch --open"
-    },
-    "devDependencies": {
-        "@esm-bundle/chai": "^4.3.4-fix.0",
-        "@types/mocha": "^10.0.10",
-        "@web/dev-server-esbuild": "^1.0.4",
-        "@web/test-runner": "^0.20.2",
-        "@web/test-runner-puppeteer": "^0.18.0",
-        "typescript": "^5.9.3"
-    }
+  "name": "raymond",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vite": "^7.2.4"
+  }
 }
