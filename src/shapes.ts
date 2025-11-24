@@ -1,14 +1,14 @@
 import {
     newPoint,
     newVector,
-    Vec3,
+    type Vec3,
     vec_dot,
     vec_magnitude_sq,
     vec_normalize,
     vec_sub,
 } from "./math.js";
 import Transform from "./transform.js";
-import { Ray } from "./types.js";
+import type { Ray } from "./types.js";
 
 const EPS = 0.00001;
 

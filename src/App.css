@@ -1,0 +1,14 @@
+html {
+    font-family: sans-serif;
+    font-size: 14px;
+}
+
+.ui-panel {
+    background-color: #3d3d3d;
+    color: #eeeeee;
+}
+
+input[type=number] {
+    background-color: #797979;
+    color: #eeeeee;
+}

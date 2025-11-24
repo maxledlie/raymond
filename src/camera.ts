@@ -1,5 +1,5 @@
 import {
-    Mat3,
+    type Mat3,
     mat3_chain,
     mat3_identity,
     mat3_inverse,
@@ -7,7 +7,7 @@ import {
     mat3_mul_vec,
     scale,
     translation,
-    Vec3,
+    type Vec3,
 } from "./math.js";
 
 export default class Camera {

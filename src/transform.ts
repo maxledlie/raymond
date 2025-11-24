@@ -5,10 +5,9 @@ import {
     rotation,
     translation,
     scale,
-    Vec3,
-    newPoint,
+    type Vec3,
     newVector,
-    Mat3,
+    type Mat3,
     mat3_transpose,
 } from "./math.js";
 
