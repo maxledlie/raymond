@@ -11,6 +11,7 @@ import {
     vec_dot,
     vec_magnitude,
     mat3_mul_mat,
+    mat3_inverse,
 } from "../math.js";
 import { Shape, type Intersection, Quad, Circle } from "../shapes.js";
 import Transform from "../transform.js";
@@ -224,6 +225,19 @@ export class RaymondCanvas extends Canvas {
             const dragStartWorld = state.camera.screenToWorld(dragStartScreen);
             const dragDelta = vec_sub(dragEndWorld, dragStartWorld);
             selectedShape.transform.translate(dragDelta.x, dragDelta.y);
+        }
+    }
+
+    doubleClicked() {
+        const { state } = this;
+        const shape = state.shapes[state.selectedShapeIndex ?? -1];
+
+        if (shape) {
+            const mat = shape.transform.getMatrix();
+            const inv = mat3_inverse(mat);
+            const t = new Transform();
+            t.setMatrix(inv!);
+            state.camera.transform = t;
         }
     }
 
