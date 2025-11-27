@@ -49,9 +49,9 @@ export default function CameraPanel({
             />
             <VectorDisplay
                 name="Scale"
-                vector={transform.translation}
+                vector={transform.scale}
                 setVector={(v) =>
-                    setTransform({ ...transform, translation: v })
+                    setTransform({ ...transform, scale: v })
                 }
             />
         </div>
