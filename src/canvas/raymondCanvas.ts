@@ -11,7 +11,6 @@ import {
     vec_dot,
     vec_magnitude,
     mat3_mul_mat,
-    mat3_inverse,
 } from "../math.js";
 import { Shape, type Intersection, Quad, Circle } from "../shapes.js";
 import Transform from "../transform.js";
@@ -19,6 +18,8 @@ import type { Ray, Laser } from "../types.js";
 import { Canvas } from "./canvas.js";
 
 type ToolType = "laser" | "quad" | "circle" | "pan" | "select";
+
+const FRAME_RATE = 60;
 
 interface Tool {
     type: ToolType;
@@ -46,6 +47,13 @@ interface Handle {
     action: HandleAction;
 }
 
+interface Animation {
+    from: Transform;
+    to: Transform;
+    time: number;
+    end: number;
+}
+
 interface State {
     debug: boolean;
     camera: Camera;
@@ -62,6 +70,7 @@ interface State {
     shapeDragged: boolean;
     /** Which `handle` of the currently selected shape is being interacted with? By convention, 0 is the rotation handle, 1-8 the scale handles. */
     activeHandleIndex: number | null;
+    cameraPath: Animation | null;
 }
 
 function defaultState(): State {
@@ -79,6 +88,7 @@ function defaultState(): State {
         activeHandleIndex: null,
         camera: new Camera(1, 1), // We don't know the screen width and height yet.
         mousePosScreen: newPoint(0, 0),
+        cameraPath: null,
     };
 }
 
@@ -238,17 +248,53 @@ export class RaymondCanvas extends Canvas {
 
             const aspectRatio = this.width / this.height;
             const worldSize = shape.transform.apply(newVector(aspectRatio, 1));
-            state.camera.setSetup({
+
+            // HACK: Work out the transform for a camera at the desired orientation
+            const c = new Camera(this.width, this.height);
+            c.setSetup({
                 ...state.camera.getSetup(),
                 center: centerWorld,
                 rotation: -shape.transform._rotation,
                 size: vec_mul(worldSize, 5),
             });
+
+            const from = new Transform();
+            from._rotation = state.camera.transform._rotation;
+            from._scale = state.camera.transform._scale;
+            from._translation = state.camera.transform._translation;
+
+            const to = new Transform();
+            to._rotation = c.transform._rotation;
+            to._scale = c.transform._scale;
+            to._translation = c.transform._translation;
+            state.cameraPath = { from, to, time: 0, end: 1.5 };
         }
+    }
+
+    smoothstep(x: number): number {
+        return 3 * Math.pow(x, 2) - 2 * Math.pow(x, 3);
     }
 
     draw() {
         const { ctx, width, height, state } = this;
+
+        // Update camera path if active
+        if (state.cameraPath) {
+            const path = state.cameraPath;
+            if (path.time >= path.end) {
+                state.cameraPath = null;
+            } else {
+                path.time += 1 / FRAME_RATE;
+                const frac = path.time / path.end;
+                const smoothX = this.smoothstep(frac);
+                state.camera.transform = Transform.interp(
+                    path.from,
+                    path.to,
+                    smoothX
+                );
+            }
+        }
+
         ctx.fillStyle = "black";
         ctx.fillRect(0, 0, width, height);
 
