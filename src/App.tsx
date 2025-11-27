@@ -4,6 +4,7 @@ import Transform from "./transform";
 import CameraPanel from "./components/CameraPanel";
 import "./App.css";
 import { RaymondCanvas } from "./canvas/raymondCanvas";
+import { newPoint, newVector } from "./math";
 
 function defaultTransform(): UITransform {
     return {
@@ -106,7 +107,14 @@ function App() {
                 >
                     <CameraPanel
                         setup={cameraSetup}
-                        setSetup={() => {}}
+                        setSetup={(setup) => {
+                            setCameraSetup(setup);
+                            canvas?.state.camera.setSetup({
+                                center: newPoint(setup.center.x, setup.center.y),
+                                rotation: setup.rotation,
+                                size: newVector(setup.size.x, setup.size.y)
+                            });
+                        }}
                         transform={cameraTransform}
                         setTransform={(t) => {
                             setCameraTransform(t);

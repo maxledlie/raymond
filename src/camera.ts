@@ -4,6 +4,7 @@ import {
     mat3_inverse,
     newPoint,
     newVector,
+    rotation,
     scale,
     translation,
     vec_magnitude,
@@ -45,7 +46,45 @@ export default class Camera {
     worldToScreen(point: Vec3): Vec3 {
         return this.transform.apply(point);
     }
-    
+
+    setSetup(s: CameraSetup) {
+        // Guard against nonsense sizes
+        if (s.size.x === 0 || s.size.y === 0) {
+            return;
+        }
+
+        // --- 1. Choose scale (pixels per world unit) ---
+        // We keep *uniform* scale so the camera doesn't shear.
+        // This assumes s.size keeps the same aspect ratio as the screen
+        // (which getSetup always does).
+        const sx = this.screenWidth / s.size.x;
+        const sy = -this.screenHeight / s.size.y;
+
+        // --- 2. World→screen rotation ---
+        // Camera rotation is opposite the world→screen rotation.
+        const worldToScreenRotation = -s.rotation;
+
+        // --- 3. Build the matrix: M = T_screenCenter * R * S * T(-center) ---
+        const screenCenter = translation(
+            this.screenWidth / 2,
+            this.screenHeight / 2
+        );
+
+        const moveWorldCenterToOrigin = translation(-s.center.x, -s.center.y);
+
+        const rot = rotation(worldToScreenRotation);
+        const scl = scale(sx, sy);
+
+        const mat = mat3_chain([
+            screenCenter, // move origin to screen centre
+            rot, // rotate world to screen orientation
+            scl, // scale world units → pixels (and flip Y)
+            moveWorldCenterToOrigin, // put camera centre at origin first
+        ]);
+
+        this.transform.setMatrix(mat);
+    }
+
     getSetup(): CameraSetup {
         const centerScreen = newPoint(
             this.screenWidth / 2,
