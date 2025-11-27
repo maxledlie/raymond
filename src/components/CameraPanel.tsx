@@ -1,18 +1,39 @@
 import "./CameraPanel.css";
 import "../App.css";
-import type { Transform, Vec2 } from "../uiTypes";
+import type { Transform, CameraSetup, Vec2 } from "../uiTypes";
 
 export interface CameraPanelProps {
+    setup: CameraSetup;
+    setSetup: (setup: CameraSetup) => void;
     transform: Transform;
     setTransform: (transform: Transform) => void;
 }
 export default function CameraPanel({
+    setup,
+    setSetup,
     transform,
     setTransform,
 }: CameraPanelProps) {
     return (
         <div>
             <h2>Camera</h2>
+            <VectorDisplay
+                name="Center"
+                vector={setup.center}
+                setVector={(v) => setSetup({ ...setup, center: v })}
+            />
+            <FloatDisplay
+                name="Rotation"
+                value={setup.rotation}
+                setValue={(v) => setSetup({ ...setup, rotation: v })}
+            />
+            <VectorDisplay
+                name="Size"
+                vector={setup.size}
+                setVector={(v) => setSetup({ ...setup, size: v })}
+            />
+
+            <hr></hr>
             <VectorDisplay
                 name="Translation"
                 vector={transform.translation}

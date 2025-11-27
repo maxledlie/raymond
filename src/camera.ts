@@ -2,16 +2,31 @@ import {
     mat3_chain,
     mat3_identity,
     mat3_inverse,
+    newPoint,
+    newVector,
     scale,
     translation,
+    vec_magnitude,
+    vec_sub,
     type Vec3,
 } from "./math.js";
 import Transform from "./transform.js";
 
+/* Describes the position, size and orientation of the viewport in world space */
+export interface CameraSetup {
+    center: Vec3;
+    size: Vec3;
+    rotation: number;
+}
+
 export default class Camera {
+    screenWidth: number;
+    screenHeight: number;
     transform: Transform;
 
     constructor(screenWidth: number, screenHeight: number) {
+        this.screenWidth = screenWidth;
+        this.screenHeight = screenHeight;
         this.transform = this._initialTransform(screenWidth, screenHeight);
     }
 
@@ -29,6 +44,32 @@ export default class Camera {
      */
     worldToScreen(point: Vec3): Vec3 {
         return this.transform.apply(point);
+    }
+    
+    getSetup(): CameraSetup {
+        const centerScreen = newPoint(
+            this.screenWidth / 2,
+            this.screenHeight / 2
+        );
+        const centerWorld = this.transform.applyInverse(centerScreen);
+        const rotation = -this.transform._rotation;
+
+        const topLeftWorld = this.transform.applyInverse(newPoint(0, 0));
+        const topRightWorld = this.transform.applyInverse(
+            newPoint(this.screenWidth, 0)
+        );
+        const width = vec_magnitude(vec_sub(topRightWorld, topLeftWorld));
+
+        const bottomLeftWorld = this.transform.applyInverse(
+            newPoint(0, this.screenHeight)
+        );
+        const height = vec_magnitude(vec_sub(bottomLeftWorld, topLeftWorld));
+
+        return {
+            center: centerWorld,
+            rotation,
+            size: newVector(width, height),
+        };
     }
 
     /**

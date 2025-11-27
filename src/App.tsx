@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Transform as UITransform } from "./uiTypes";
+import type { CameraSetup, Transform as UITransform } from "./uiTypes";
 import Transform from "./transform";
 import CameraPanel from "./components/CameraPanel";
 import "./App.css";
@@ -13,12 +13,23 @@ function defaultTransform(): UITransform {
     };
 }
 
+function defaultCameraSetup(): CameraSetup {
+    return {
+        center: { x: 0, y: 0 },
+        rotation: 0,
+        size: { x: 1, y: 1 },
+    };
+}
+
 function App() {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
     const [canvas, setCanvas] = useState<RaymondCanvas | null>(null);
     const [cameraTransform, setCameraTransform] =
         useState<UITransform>(defaultTransform);
+
+    const [cameraSetup, setCameraSetup] =
+        useState<CameraSetup>(defaultCameraSetup);
 
     // Initialise the canvas once the DOM element is ready.
     // The canvas will independently draw its current state every frame, and update its current
@@ -47,6 +58,7 @@ function App() {
             }
             const state = getCanvasState(canvas);
             setCameraTransform(state.cameraTransform);
+            setCameraSetup(state.cameraSetup);
             window.setTimeout(loop, 1000 / 24);
         };
         loop();
@@ -93,6 +105,8 @@ function App() {
                     }}
                 >
                     <CameraPanel
+                        setup={cameraSetup}
+                        setSetup={() => {}}
                         transform={cameraTransform}
                         setTransform={(t) => {
                             setCameraTransform(t);
@@ -113,15 +127,16 @@ function App() {
 }
 
 interface CanvasState {
+    cameraSetup: CameraSetup;
     cameraTransform: UITransform;
 }
 
 function getCanvasState(canvas: RaymondCanvas): CanvasState {
     const {
-        state: {
-            camera: { transform: cameraTransform },
-        },
+        state: { camera },
     } = canvas;
+
+    const cameraTransform = camera.transform;
 
     const cameraTransformUI = {
         translation: {
@@ -135,6 +150,7 @@ function getCanvasState(canvas: RaymondCanvas): CanvasState {
         },
     };
     return {
+        cameraSetup: camera.getSetup(),
         cameraTransform: cameraTransformUI,
     };
 }
