@@ -10,6 +10,7 @@ import {
     vec_div,
     vec_dot,
     vec_magnitude,
+    mat3_mul_mat,
 } from "../math.js";
 import { Shape, type Intersection, Quad, Circle } from "../shapes.js";
 import Transform from "../transform.js";
@@ -564,27 +565,26 @@ export class RaymondCanvas extends Canvas {
         }
 
         ctx.fillStyle = "lightblue";
-        const centre = state.camera.worldToScreen(
-            circle.transform.apply(newPoint(0, 0))
-        );
-        const radius = state.camera.worldToScreen(circle.transform._scale);
+        const oldTransform = ctx.getTransform();
 
-        // TODO: Subtract camera rotation once this is supported
-        const rotation = circle.transform._rotation;
+        // Get the combination of object and camera transforms
+        const objMat = circle.transform.getMatrix();
+        const camMat = state.camera.transform.getMatrix();
+        const mat = mat3_mul_mat(camMat, objMat);
+        ctx.setTransform(
+            mat[0][0],
+            mat[1][0],
+            mat[0][1],
+            mat[1][1],
+            mat[0][2],
+            mat[1][2]
+        );
 
         ctx.beginPath();
-        ctx.ellipse(
-            centre.x,
-            centre.y,
-            Math.abs(radius.x),
-            Math.abs(radius.y),
-            -rotation,
-            0,
-            2 * Math.PI
-        );
+        ctx.ellipse(0, 0, 1, 1, 0, 0, 2 * Math.PI);
         ctx.closePath();
-        ctx.stroke();
         ctx.fill();
+        ctx.setTransform(oldTransform);
     }
 
     /**
