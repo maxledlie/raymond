@@ -9,12 +9,20 @@ import {
     newVector,
     type Mat3,
     mat3_transpose,
+    vec_add,
+    vec_mul,
 } from "./math.js";
 
 export default class Transform {
     _rotation: number = 0;
     _scale: Vec3 = newVector(1, 1);
     _translation: Vec3 = newVector(0, 0);
+
+    inverse(): Transform {
+        const inv = new Transform();
+        inv.setMatrix(mat3_inverse(this.getMatrix())!);
+        return inv;
+    }
 
     rotate(theta: number) {
         this._rotation += theta;
@@ -78,5 +86,19 @@ export default class Transform {
 
         const inv_transpose = mat3_transpose(inv);
         return mat3_mul_vec(inv_transpose, v);
+    }
+
+    static interp(a: Transform, b: Transform, x: number) {
+        const r = (1 - x) * a._rotation + x * b._rotation;
+        const s = vec_add(vec_mul(a._scale, 1 - x), vec_mul(b._scale, x));
+        const t = vec_add(
+            vec_mul(a._translation, 1 - x),
+            vec_mul(b._translation, x)
+        );
+        const ret = new Transform();
+        ret.rotate(r);
+        ret.scale(s.x, s.y);
+        ret.translate(t.x, t.y);
+        return ret;
     }
 }
