@@ -233,11 +233,17 @@ export class RaymondCanvas extends Canvas {
         const shape = state.shapes[state.selectedShapeIndex ?? -1];
 
         if (shape) {
-            const mat = shape.transform.getMatrix();
-            const inv = mat3_inverse(mat);
-            const t = new Transform();
-            t.setMatrix(inv!);
-            state.camera.transform = t;
+            // Position the camera such that the shape's bounding box appears to be a unit square at the center of the screen
+            const centerWorld = shape.transform.apply(newPoint(0, 0));
+
+            const aspectRatio = this.width / this.height;
+            const worldSize = shape.transform.apply(newVector(aspectRatio, 1));
+            state.camera.setSetup({
+                ...state.camera.getSetup(),
+                center: centerWorld,
+                rotation: -shape.transform._rotation,
+                size: vec_mul(worldSize, 5),
+            });
         }
     }
 
