@@ -1,6 +1,5 @@
 import "./CameraPanel.css";
 import "../App.css";
-import type { ChangeEvent } from "react";
 import type { Transform, Vec2 } from "../uiTypes";
 
 export interface CameraPanelProps {
@@ -11,55 +10,100 @@ export default function CameraPanel({
     transform,
     setTransform,
 }: CameraPanelProps) {
-    function setTransformValue(
-        e: ChangeEvent<HTMLInputElement>,
-        attr: keyof Transform,
-        subAttr: keyof Vec2
-    ) {
-        const currentAttr = transform[attr] as Vec2;
-        const newTransform = {
-            ...transform,
-            [attr]: {
-                ...currentAttr,
-                [subAttr]: parseFloat(e.target.value),
-            },
-        };
-        setTransform(newTransform);
-    }
-
     return (
         <div>
             <h2>Camera</h2>
-            <form>
-                <div className="form-field">
-                    <label>
-                        Translation X{" "}
-                        <input
-                            type="number"
-                            name="location X"
-                            value={truncateFloat(transform.translation.x, 2)}
-                            step={1}
-                            onChange={(e) =>
-                                setTransformValue(e, "translation", "x")
-                            }
-                        ></input>
-                    </label>
-                </div>
-                <div className="form-field">
-                    <label>
-                        Y{" "}
-                        <input
-                            type="number"
-                            name="location Y"
-                            value={truncateFloat(transform.translation.y, 2)}
-                            step={1}
-                            onChange={(e) =>
-                                setTransformValue(e, "translation", "y")
-                            }
-                        ></input>
-                    </label>
-                </div>
-            </form>
+            <VectorDisplay
+                name="Translation"
+                vector={transform.translation}
+                setVector={(v) =>
+                    setTransform({ ...transform, translation: v })
+                }
+            />
+            <FloatDisplay
+                name="Rotation"
+                value={transform.rotation}
+                setValue={(v) => setTransform({ ...transform, rotation: v })}
+                step={0.01}
+            />
+            <VectorDisplay
+                name="Scale"
+                vector={transform.translation}
+                setVector={(v) =>
+                    setTransform({ ...transform, translation: v })
+                }
+            />
+        </div>
+    );
+}
+
+interface FloatDisplayProps {
+    name: string;
+    value: number;
+    setValue: (v: number) => void;
+    step?: number;
+}
+function FloatDisplay({ name, value, setValue, step }: FloatDisplayProps) {
+    return (
+        <div style={{ margin: "6px" }}>
+            <div className="form-field">
+                <label>
+                    {name}
+                    <input
+                        type="number"
+                        name={`${name} x`}
+                        value={truncateFloat(value, 2)}
+                        step={step ?? 0.01}
+                        onChange={(e) => setValue(parseFloat(e.target.value))}
+                    ></input>
+                </label>
+            </div>
+        </div>
+    );
+}
+
+interface VectorDisplayProps {
+    name: string;
+    vector: Vec2;
+    setVector: (v: Vec2) => void;
+}
+function VectorDisplay({ name, vector, setVector }: VectorDisplayProps) {
+    return (
+        <div style={{ margin: "6px" }}>
+            <div className="form-field">
+                <label>
+                    {name} X{" "}
+                    <input
+                        type="number"
+                        name={`${name} x`}
+                        value={truncateFloat(vector.x, 2)}
+                        step={1}
+                        onChange={(e) =>
+                            setVector({
+                                x: parseFloat(e.target.value),
+                                y: vector.y,
+                            })
+                        }
+                    ></input>
+                </label>
+            </div>
+            <div className="form-field">
+                <label>
+                    Y{" "}
+                    <input
+                        type="number"
+                        name={`${name} y`}
+                        value={truncateFloat(vector.y, 2)}
+                        step={1}
+                        onChange={(e) =>
+                            setVector({
+                                x: vector.x,
+                                y: parseFloat(e.target.value),
+                            })
+                        }
+                    ></input>
+                </label>
+            </div>
         </div>
     );
 }
