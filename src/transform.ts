@@ -15,12 +15,6 @@ export default class Transform {
     _scale: Vec3 = newVector(1, 1);
     _translation: Vec3 = newVector(0, 0);
 
-    inverse(): Transform {
-        const inv = new Transform();
-        inv.setMatrix(mat3_inverse(this.getMatrix())!);
-        return inv;
-    }
-
     rotate(theta: number) {
         this._rotation += theta;
     }
@@ -56,10 +50,6 @@ export default class Transform {
             rotation(this._rotation),
             scale(this._scale.x, this._scale.y),
         ]);
-    }
-
-    apply(v: Vec3): Vec3 {
-        return mat3_mul_vec(this.getMatrix(), v);
     }
 
     applyTranspose(v: Vec3): Vec3 {

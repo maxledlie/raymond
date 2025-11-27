@@ -8,7 +8,7 @@ import {
     vec_sub,
     type Vec3,
 } from "./math.js";
-import Transform, { rotation, scale, translation } from "./transform.js";
+import Transform, { apply, rotation, scale, translation } from "./transform.js";
 
 /* Describes the position, size and orientation of the viewport in world space */
 export interface CameraSetup {
@@ -41,7 +41,7 @@ export default class Camera {
      * Given a point in world space, returns the pixel coordinates at which it should appear on the screen.
      */
     worldToScreen(point: Vec3): Vec3 {
-        return this.transform.apply(point);
+        return apply(this.transform, point);
     }
 
     setSetup(s: CameraSetup) {

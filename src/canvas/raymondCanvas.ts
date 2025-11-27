@@ -13,7 +13,7 @@ import {
     mat3_mul_mat,
 } from "../math.js";
 import { Shape, type Intersection, Quad, Circle } from "../shapes.js";
-import Transform, { interp } from "../transform.js";
+import Transform, { apply, interp } from "../transform.js";
 import type { Ray, Laser } from "../types.js";
 import { Canvas } from "./canvas.js";
 
@@ -211,7 +211,7 @@ export class RaymondCanvas extends Canvas {
         if (state.selectedShapeIndex != null && state.activeHandleIndex == 0) {
             // We are rotating the shape. The centre of the shape, top of the shape, and mouse position should be collinear.
             const shape = state.shapes[state.selectedShapeIndex];
-            const shapeCentreWorld = shape.transform.apply(newPoint(0, 0));
+            const shapeCentreWorld = apply(shape.transform, newPoint(0, 0));
             const mouseWorld = state.camera.screenToWorld(state.mousePosScreen);
             const d = vec_sub(mouseWorld, shapeCentreWorld);
             const theta = Math.atan2(d.y, d.x);
@@ -244,10 +244,10 @@ export class RaymondCanvas extends Canvas {
 
         if (shape) {
             // Position the camera such that the shape's bounding box appears to be a unit square at the center of the screen
-            const centerWorld = shape.transform.apply(newPoint(0, 0));
+            const centerWorld = apply(shape.transform, newPoint(0, 0));
 
             const aspectRatio = this.width / this.height;
-            const worldSize = shape.transform.apply(newVector(aspectRatio, 1));
+            const worldSize = apply(shape.transform, newVector(aspectRatio, 1));
 
             // HACK: Work out the transform for a camera at the desired orientation
             const c = new Camera(this.width, this.height);
@@ -287,11 +287,7 @@ export class RaymondCanvas extends Canvas {
                 path.time += 1 / FRAME_RATE;
                 const frac = path.time / path.end;
                 const smoothX = this.smoothstep(frac);
-                state.camera.transform = interp(
-                    path.from,
-                    path.to,
-                    smoothX
-                );
+                state.camera.transform = interp(path.from, path.to, smoothX);
             }
         }
 
@@ -377,11 +373,11 @@ export class RaymondCanvas extends Canvas {
         const segments: RaySegment[] = [];
         for (const laser of lasers) {
             const fullDir = vec_sub(
-                laser.transform.apply(newPoint(1, 0)),
-                laser.transform.apply(newPoint(0, 0))
+                apply(laser.transform, newPoint(1, 0)),
+                apply(laser.transform, newPoint(0, 0))
             );
             let ray = {
-                start: laser.transform.apply(newPoint(0, 0)),
+                start: apply(laser.transform, newPoint(0, 0)),
                 direction: vec_normalize(fullDir),
             };
             for (let iReflect = 0; iReflect < 100; iReflect++) {
@@ -531,14 +527,14 @@ export class RaymondCanvas extends Canvas {
         ];
 
         const scaleHandlesPos = handlesLocal.map((x) =>
-            state.camera.worldToScreen(shape.transform.apply(x))
+            state.camera.worldToScreen(apply(shape.transform, x))
         );
 
         const centreScreen = state.camera.worldToScreen(
-            shape.transform.apply(newPoint(0, 0))
+            apply(shape.transform, newPoint(0, 0))
         );
         const topScreen = state.camera.worldToScreen(
-            shape.transform.apply(newPoint(0, 1))
+            apply(shape.transform, newPoint(0, 1))
         );
         const d = vec_normalize(vec_sub(topScreen, centreScreen));
         const rotationHandlePos = vec_add(topScreen, vec_mul(d, 30));
@@ -572,7 +568,7 @@ export class RaymondCanvas extends Canvas {
         }
 
         const points = [topLeft, topRight, bottomRight, bottomLeft].map((p) => {
-            const world = laser.transform.apply(p);
+            const world = apply(laser.transform, p);
             return state.camera.worldToScreen(world);
         });
 
@@ -605,7 +601,7 @@ export class RaymondCanvas extends Canvas {
             newPoint(1, -1),
             newPoint(-1, -1),
         ]) {
-            const world = quad.transform.apply(local);
+            const world = apply(quad.transform, local);
             const screen = state.camera.worldToScreen(world);
             points.push(screen);
         }
@@ -667,12 +663,12 @@ export class RaymondCanvas extends Canvas {
         ctx.lineWidth = 1;
         ctx.strokeStyle = minorColor;
         for (let i = -gridSize; i <= gridSize; i++) {
-            const xStartWorld = transform.apply(newPoint(i, -gridSize));
-            const xEndWorld = transform.apply(newPoint(i, gridSize));
+            const xStartWorld = apply(transform, newPoint(i, -gridSize));
+            const xEndWorld = apply(transform, newPoint(i, gridSize));
             this.drawLine(xStartWorld, xEndWorld);
 
-            const yStartWorld = transform.apply(newPoint(-gridSize, i));
-            const yEndWorld = transform.apply(newPoint(gridSize, i));
+            const yStartWorld = apply(transform, newPoint(-gridSize, i));
+            const yEndWorld = apply(transform, newPoint(gridSize, i));
             this.drawLine(yStartWorld, yEndWorld);
         }
 
@@ -680,25 +676,25 @@ export class RaymondCanvas extends Canvas {
         ctx.strokeStyle = majorColor;
         const xAxisEndLocal = newPoint(gridSize, 0);
         const yAxisEndLocal = newPoint(0, gridSize);
-        const yAxisStartWorld = transform.apply(newPoint(0, -gridSize));
-        const yAxisEndWorld = transform.apply(yAxisEndLocal);
-        const xAxisStartWorld = transform.apply(newPoint(-gridSize, 0));
-        const xAxisEndWorld = transform.apply(xAxisEndLocal);
+        const yAxisStartWorld = apply(transform, newPoint(0, -gridSize));
+        const yAxisEndWorld = apply(transform, yAxisEndLocal);
+        const xAxisStartWorld = apply(transform, newPoint(-gridSize, 0));
+        const xAxisEndWorld = apply(transform, xAxisEndLocal);
         this.drawLine(yAxisStartWorld, yAxisEndWorld);
         this.drawLine(xAxisStartWorld, xAxisEndWorld);
 
         // Arrow heads indicating direction of axes
         const yAxisLeftLocal = vec_add(yAxisEndLocal, newVector(-0.1, -0.1));
         const yAxisRightLocal = vec_add(yAxisEndLocal, newVector(0.1, -0.1));
-        const yAxisLeftWorld = transform.apply(yAxisLeftLocal);
-        const yAxisRightWorld = transform.apply(yAxisRightLocal);
+        const yAxisLeftWorld = apply(transform, yAxisLeftLocal);
+        const yAxisRightWorld = apply(transform, yAxisRightLocal);
         this.drawLine(yAxisEndWorld, yAxisLeftWorld);
         this.drawLine(yAxisEndWorld, yAxisRightWorld);
 
         const xAxisLeftLocal = vec_add(xAxisEndLocal, newVector(-0.1, 0.1));
         const xAxisRightLocal = vec_add(xAxisEndLocal, newVector(-0.1, -0.1));
-        const xAxisLeftWorld = transform.apply(xAxisLeftLocal);
-        const xAxisRightWorld = transform.apply(xAxisRightLocal);
+        const xAxisLeftWorld = apply(transform, xAxisLeftLocal);
+        const xAxisRightWorld = apply(transform, xAxisRightLocal);
         this.drawLine(xAxisEndWorld, xAxisLeftWorld);
         this.drawLine(xAxisEndWorld, xAxisRightWorld);
     }
