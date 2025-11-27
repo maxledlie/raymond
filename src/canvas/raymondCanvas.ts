@@ -750,4 +750,10 @@ export class RaymondCanvas extends Canvas {
             transform,
         };
     }
+
+    // Functions for updates via UI
+
+    setCameraTransform(transform: Transform) {
+        this.state.camera.transform = transform;
+    }
 }

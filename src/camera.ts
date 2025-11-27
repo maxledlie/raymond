@@ -1,9 +1,7 @@
 import {
-    type Mat3,
     mat3_chain,
     mat3_identity,
     mat3_inverse,
-    mat3_mul_mat,
     scale,
     translation,
     type Vec3,
@@ -11,7 +9,7 @@ import {
 import Transform from "./transform.js";
 
 export default class Camera {
-    transform: Transform
+    transform: Transform;
 
     constructor(screenWidth: number, screenHeight: number) {
         this.transform = this._initialTransform(screenWidth, screenHeight);
@@ -49,7 +47,12 @@ export default class Camera {
         const invariantWorld = this.screenToWorld(invariantPoint);
         const trans = translation(invariantWorld.x, invariantWorld.y);
         const transInv = mat3_inverse(trans) ?? mat3_identity();
-        const newMat = mat3_chain([this.transform.getMatrix(), trans, scale(1 - fraction), transInv]);
+        const newMat = mat3_chain([
+            this.transform.getMatrix(),
+            trans,
+            scale(1 - fraction),
+            transInv,
+        ]);
         this.transform.setMatrix(newMat);
     }
 

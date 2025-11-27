@@ -1,6 +1,7 @@
 import "./CameraPanel.css";
 import "../App.css";
 import type { ChangeEvent } from "react";
+import type { Transform, Vec2 } from "../uiTypes";
 
 export interface CameraPanelProps {
     transform: Transform;
@@ -32,11 +33,11 @@ export default function CameraPanel({
             <form>
                 <div className="form-field">
                     <label>
-                        Location X{" "}
+                        Translation X{" "}
                         <input
                             type="number"
                             name="location X"
-                            value={transform.translation.x}
+                            value={truncateFloat(transform.translation.x, 2)}
                             step={1}
                             onChange={(e) =>
                                 setTransformValue(e, "translation", "x")
@@ -50,7 +51,7 @@ export default function CameraPanel({
                         <input
                             type="number"
                             name="location Y"
-                            value={transform.translation.y}
+                            value={truncateFloat(transform.translation.y, 2)}
                             step={1}
                             onChange={(e) =>
                                 setTransformValue(e, "translation", "y")
@@ -60,5 +61,12 @@ export default function CameraPanel({
                 </div>
             </form>
         </div>
+    );
+}
+
+function truncateFloat(n: number, numDecimalPlaces: number): number {
+    return (
+        Math.round(n * Math.pow(10, numDecimalPlaces)) /
+        Math.pow(10, numDecimalPlaces)
     );
 }
