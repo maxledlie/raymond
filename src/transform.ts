@@ -2,9 +2,6 @@ import {
     mat3_chain,
     mat3_inverse,
     mat3_mul_vec,
-    rotation,
-    translation,
-    scale,
     type Vec3,
     newVector,
     type Mat3,
@@ -76,29 +73,51 @@ export default class Transform {
         const inv = mat3_inverse(mat);
         return inv ? mat3_mul_vec(inv, v) : v;
     }
+}
 
-    applyInverseTranspose(v: Vec3): Vec3 {
-        const mat = this.getMatrix();
-        const inv = mat3_inverse(mat);
-        if (!inv) {
-            return v;
-        }
+export function apply(transform: Transform, vec: Vec3): Vec3 {
+    return mat3_mul_vec(transform.getMatrix(), vec);
+}
 
-        const inv_transpose = mat3_transpose(inv);
-        return mat3_mul_vec(inv_transpose, v);
-    }
+/** Linearly interpolates the scale, translation and rotations of the two transforms,
+ *  allowing for smooth animation between the two. **/
+export function interp(a: Transform, b: Transform, x: number) {
+    const r = (1 - x) * a._rotation + x * b._rotation;
+    const s = vec_add(vec_mul(a._scale, 1 - x), vec_mul(b._scale, x));
+    const t = vec_add(
+        vec_mul(a._translation, 1 - x),
+        vec_mul(b._translation, x)
+    );
+    const ret = new Transform();
+    ret.rotate(r);
+    ret.scale(s.x, s.y);
+    ret.translate(t.x, t.y);
+    return ret;
+}
 
-    static interp(a: Transform, b: Transform, x: number) {
-        const r = (1 - x) * a._rotation + x * b._rotation;
-        const s = vec_add(vec_mul(a._scale, 1 - x), vec_mul(b._scale, x));
-        const t = vec_add(
-            vec_mul(a._translation, 1 - x),
-            vec_mul(b._translation, x)
-        );
-        const ret = new Transform();
-        ret.rotate(r);
-        ret.scale(s.x, s.y);
-        ret.translate(t.x, t.y);
-        return ret;
-    }
+export function translation(tx: number, ty: number): Mat3 {
+    return [
+        [1, 0, tx],
+        [0, 1, ty],
+        [0, 0, 1],
+    ];
+}
+
+export function rotation(theta: number): Mat3 {
+    const c = Math.cos(theta);
+    const s = Math.sin(theta);
+    return [
+        [c, -s, 0],
+        [s, c, 0],
+        [0, 0, 1],
+    ];
+}
+
+export function scale(sx: number, sy?: number): Mat3 {
+    const _sy = typeof sy === "number" ? sy : sx;
+    return [
+        [sx, 0, 0],
+        [0, _sy, 0],
+        [0, 0, 1],
+    ];
 }

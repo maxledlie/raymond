@@ -1,4 +1,7 @@
 import {
+    mat3_inverse,
+    mat3_mul_vec,
+    mat3_transpose,
     newPoint,
     newVector,
     type Vec3,
@@ -50,7 +53,16 @@ export abstract class Shape {
         // Transform point from world space to local space, then normal from local back to world
         const pointLocal = this.transform.applyInverse(pointWorld);
         const normalLocal = this._normalAtLocal(pointLocal);
-        const normalWorld = this.transform.applyInverseTranspose(normalLocal);
+
+        const mat = this.transform.getMatrix();
+        const inv = mat3_inverse(mat);
+
+        let normalWorld: Vec3 = { ...normalLocal };
+        if (inv) {
+            const inv_transpose = mat3_transpose(inv);
+            normalWorld = mat3_mul_vec(inv_transpose, normalLocal);
+        }
+
         normalWorld.w = 0;
         return vec_normalize(normalWorld);
     }

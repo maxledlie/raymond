@@ -4,14 +4,11 @@ import {
     mat3_inverse,
     newPoint,
     newVector,
-    rotation,
-    scale,
-    translation,
     vec_magnitude,
     vec_sub,
     type Vec3,
 } from "./math.js";
-import Transform from "./transform.js";
+import Transform, { rotation, scale, translation } from "./transform.js";
 
 /* Describes the position, size and orientation of the viewport in world space */
 export interface CameraSetup {
@@ -57,6 +54,7 @@ export default class Camera {
         // We keep *uniform* scale so the camera doesn't shear.
         // This assumes s.size keeps the same aspect ratio as the screen
         // (which getSetup always does).
+
         const sx = this.screenWidth / s.size.x;
         const sy = -this.screenHeight / s.size.y;
 

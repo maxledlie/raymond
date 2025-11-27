@@ -13,7 +13,7 @@ import {
     mat3_mul_mat,
 } from "../math.js";
 import { Shape, type Intersection, Quad, Circle } from "../shapes.js";
-import Transform from "../transform.js";
+import Transform, { interp } from "../transform.js";
 import type { Ray, Laser } from "../types.js";
 import { Canvas } from "./canvas.js";
 
@@ -287,7 +287,7 @@ export class RaymondCanvas extends Canvas {
                 path.time += 1 / FRAME_RATE;
                 const frac = path.time / path.end;
                 const smoothX = this.smoothstep(frac);
-                state.camera.transform = Transform.interp(
+                state.camera.transform = interp(
                     path.from,
                     path.to,
                     smoothX
