@@ -11,9 +11,19 @@ import {
     vec_dot,
     vec_magnitude,
     mat3_mul_mat,
+    mat3_identity,
 } from "../math.js";
 import { Shape, type Intersection, Quad, Circle } from "../shapes.js";
-import Transform, { apply, interp } from "../transform.js";
+import {
+    type Transform,
+    apply,
+    interp,
+    inverse,
+    fromObjectTransform,
+    toObjectTransform,
+    transformObject,
+    translateObject,
+} from "../transform.js";
 import type { Ray, Laser } from "../types.js";
 import { Canvas } from "./canvas.js";
 
@@ -215,7 +225,10 @@ export class RaymondCanvas extends Canvas {
             const mouseWorld = state.camera.screenToWorld(state.mousePosScreen);
             const d = vec_sub(mouseWorld, shapeCentreWorld);
             const theta = Math.atan2(d.y, d.x);
-            shape.transform._rotation = theta - Math.PI / 2;
+            shape.transform = transformObject(shape.transform, (o) => ({
+                ...o,
+                rotation: theta - Math.PI / 2,
+            }));
         }
 
         // Drag selected shape
@@ -234,7 +247,10 @@ export class RaymondCanvas extends Canvas {
             const dragEndWorld = state.camera.screenToWorld(dragEndScreen);
             const dragStartWorld = state.camera.screenToWorld(dragStartScreen);
             const dragDelta = vec_sub(dragEndWorld, dragStartWorld);
-            selectedShape.transform.translate(dragDelta.x, dragDelta.y);
+            selectedShape.transform = translateObject(
+                selectedShape.transform,
+                dragDelta
+            );
         }
     }
 
@@ -249,25 +265,22 @@ export class RaymondCanvas extends Canvas {
             const aspectRatio = this.width / this.height;
             const worldSize = apply(shape.transform, newVector(aspectRatio, 1));
 
+            const o = toObjectTransform(shape.transform);
+
             // HACK: Work out the transform for a camera at the desired orientation
             const c = new Camera(this.width, this.height);
             c.setSetup({
                 ...state.camera.getSetup(),
                 center: centerWorld,
-                rotation: -shape.transform._rotation,
+                rotation: -o.rotation,
                 size: vec_mul(worldSize, 5),
             });
 
-            const from = new Transform();
-            from._rotation = state.camera.transform._rotation;
-            from._scale = state.camera.transform._scale;
-            from._translation = state.camera.transform._translation;
-
-            const to = new Transform();
-            to._rotation = c.transform._rotation;
-            to._scale = c.transform._scale;
-            to._translation = c.transform._translation;
-            state.cameraPath = { from, to, time: 0, end: 1.5 };
+            // TODO: This is just an awkward way of copying. Remove once Transform is no longer a class.
+            const from = fromObjectTransform(
+                toObjectTransform(state.camera.transform)
+            );
+            state.cameraPath = { from, to: c.transform, time: 0, end: 1.5 };
         }
     }
 
@@ -342,7 +355,7 @@ export class RaymondCanvas extends Canvas {
         // Draw coordinate grid
         const minorColor = "rgb(100 100 100 / 30%)";
         const majorColor = "rgb(255 255 255)";
-        this.drawCoordinates(new Transform(), majorColor, minorColor, 100);
+        this.drawCoordinates(mat3_identity(), majorColor, minorColor, 100);
 
         // Draw preview entities
         let previewLaser = this.computePreviewLaser();
@@ -630,9 +643,7 @@ export class RaymondCanvas extends Canvas {
         const oldTransform = ctx.getTransform();
 
         // Get the combination of object and camera transforms
-        const objMat = circle.transform.getMatrix();
-        const camMat = state.camera.transform.getMatrix();
-        const mat = mat3_mul_mat(camMat, objMat);
+        const mat = mat3_mul_mat(state.camera.transform, circle.transform);
         ctx.setTransform(
             mat[0][0],
             mat[1][0],
@@ -711,7 +722,7 @@ export class RaymondCanvas extends Canvas {
 
         // Transform point from screen to world to local space
         const world = state.camera.screenToWorld(screenPoint);
-        const local = laser.transform.applyInverse(world);
+        const local = apply(inverse(laser.transform), world);
 
         // The drawn rectangle is at local coords x in [-40, 0], y in [-10, 10]
         if (
@@ -764,9 +775,11 @@ export class RaymondCanvas extends Canvas {
         const height = Math.abs(endWorld.y - startWorld.y);
 
         const centre = vec_div(vec_add(startWorld, endWorld), 2);
-        const transform = new Transform();
-        transform.scale(width, height);
-        transform.translate(centre.x, centre.y);
+        const transform = fromObjectTransform({
+            scale: newVector(width, height),
+            rotation: 0,
+            translation: newVector(centre.x, centre.y),
+        });
         return new Quad(transform);
     }
 
@@ -787,9 +800,11 @@ export class RaymondCanvas extends Canvas {
         }
 
         const centre = vec_div(vec_add(startWorld, endWorld), 2);
-        const transform = new Transform();
-        transform.scale(width, height);
-        transform.translate(centre.x, centre.y);
+        const transform = fromObjectTransform({
+            scale: newVector(width, height),
+            rotation: 0,
+            translation: newVector(centre.x, centre.y),
+        });
         return new Circle(transform);
     }
 
@@ -801,12 +816,14 @@ export class RaymondCanvas extends Canvas {
         const end = state.camera.screenToWorld(state.mousePosScreen);
         const dir = vec_sub(end, state.placementStartWorld);
         const theta = Math.atan2(dir.y, dir.x);
-        const transform = new Transform();
-        transform.rotate(theta);
-        transform.translate(
-            state.placementStartWorld.x,
-            state.placementStartWorld.y
-        );
+        const transform = fromObjectTransform({
+            scale: newVector(1, 1),
+            rotation: theta,
+            translation: newVector(
+                state.placementStartWorld.x,
+                state.placementStartWorld.y
+            ),
+        });
         return {
             type: "laser",
             transform,

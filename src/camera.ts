@@ -8,7 +8,17 @@ import {
     vec_sub,
     type Vec3,
 } from "./math.js";
-import Transform, { apply, rotation, scale, translation } from "./transform.js";
+import {
+    type Transform,
+    apply,
+    inverse,
+    fromObjectTransform,
+    rotation,
+    scaling,
+    toObjectTransform,
+    translation,
+    translateObject,
+} from "./transform.js";
 
 /* Describes the position, size and orientation of the viewport in world space */
 export interface CameraSetup {
@@ -31,10 +41,11 @@ export default class Camera {
     _initialTransform(screenWidth: number, screenHeight: number): Transform {
         // Flip so y axis points upwards and stretch so each unit is much larger than one pixel.
         // Translate so origin is at centre of screen.
-        const transform = new Transform();
-        transform.scale(100, -100);
-        transform.translate(screenWidth / 2, screenHeight / 2);
-        return transform;
+        return fromObjectTransform({
+            scale: newVector(100, -100),
+            rotation: 0,
+            translation: newVector(screenWidth / 2, screenHeight / 2),
+        });
     }
 
     /**
@@ -71,7 +82,7 @@ export default class Camera {
         const moveWorldCenterToOrigin = translation(-s.center.x, -s.center.y);
 
         const rot = rotation(worldToScreenRotation);
-        const scl = scale(sx, sy);
+        const scl = scaling(sx, sy);
 
         const mat = mat3_chain([
             screenCenter, // move origin to screen centre
@@ -80,7 +91,7 @@ export default class Camera {
             moveWorldCenterToOrigin, // put camera centre at origin first
         ]);
 
-        this.transform.setMatrix(mat);
+        this.transform = mat;
     }
 
     getSetup(): CameraSetup {
@@ -88,23 +99,25 @@ export default class Camera {
             this.screenWidth / 2,
             this.screenHeight / 2
         );
-        const centerWorld = this.transform.applyInverse(centerScreen);
-        const rotation = -this.transform._rotation;
+        const centerWorld = apply(inverse(this.transform), centerScreen);
+        const { rotation } = toObjectTransform(this.transform);
 
-        const topLeftWorld = this.transform.applyInverse(newPoint(0, 0));
-        const topRightWorld = this.transform.applyInverse(
+        const topLeftWorld = apply(inverse(this.transform), newPoint(0, 0));
+        const topRightWorld = apply(
+            inverse(this.transform),
             newPoint(this.screenWidth, 0)
         );
         const width = vec_magnitude(vec_sub(topRightWorld, topLeftWorld));
 
-        const bottomLeftWorld = this.transform.applyInverse(
+        const bottomLeftWorld = apply(
+            inverse(this.transform),
             newPoint(0, this.screenHeight)
         );
         const height = vec_magnitude(vec_sub(bottomLeftWorld, topLeftWorld));
 
         return {
             center: centerWorld,
-            rotation,
+            rotation: -rotation,
             size: newVector(width, height),
         };
     }
@@ -113,7 +126,7 @@ export default class Camera {
      * Given a point on the screen in pixel coordinates, returns the point in world space this represents.
      */
     screenToWorld(point: Vec3): Vec3 {
-        return this.transform.applyInverse(point);
+        return apply(inverse(this.transform), point);
     }
 
     /**
@@ -125,19 +138,18 @@ export default class Camera {
         const invariantWorld = this.screenToWorld(invariantPoint);
         const trans = translation(invariantWorld.x, invariantWorld.y);
         const transInv = mat3_inverse(trans) ?? mat3_identity();
-        const newMat = mat3_chain([
-            this.transform.getMatrix(),
+        this.transform = mat3_chain([
+            this.transform,
             trans,
-            scale(1 - fraction),
+            scaling(1 - fraction),
             transInv,
         ]);
-        this.transform.setMatrix(newMat);
     }
 
     /**
      * Pans the camera the given distance in screen space
      */
     pan(delta: Vec3) {
-        this.transform.translate(delta.x, delta.y);
+        this.transform = translateObject(this.transform, delta);
     }
 }

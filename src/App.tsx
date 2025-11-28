@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { CameraSetup, Transform as UITransform } from "./uiTypes";
-import Transform from "./transform";
+import {
+    fromObjectTransform,
+    toObjectTransform,
+} from "./transform";
 import CameraPanel from "./components/CameraPanel";
 import "./App.css";
 import { RaymondCanvas } from "./canvas/raymondCanvas";
@@ -110,21 +113,25 @@ function App() {
                         setSetup={(setup) => {
                             setCameraSetup(setup);
                             canvas?.state.camera.setSetup({
-                                center: newPoint(setup.center.x, setup.center.y),
+                                center: newPoint(
+                                    setup.center.x,
+                                    setup.center.y
+                                ),
                                 rotation: setup.rotation,
-                                size: newVector(setup.size.x, setup.size.y)
+                                size: newVector(setup.size.x, setup.size.y),
                             });
                         }}
                         transform={cameraTransform}
                         setTransform={(t) => {
                             setCameraTransform(t);
-                            const transform = new Transform();
-                            transform.scale(t.scale.x, t.scale.y);
-                            transform.rotate(t.rotation);
-                            transform.translate(
-                                t.translation.x,
-                                t.translation.y
-                            );
+                            const transform = fromObjectTransform({
+                                scale: newVector(t.scale.x, t.scale.y),
+                                rotation: t.rotation,
+                                translation: newVector(
+                                    t.translation.x,
+                                    t.translation.y
+                                ),
+                            });
                             canvas?.setCameraTransform(transform);
                         }}
                     />
@@ -144,17 +151,17 @@ function getCanvasState(canvas: RaymondCanvas): CanvasState {
         state: { camera },
     } = canvas;
 
-    const cameraTransform = camera.transform;
+    const cameraTransform = toObjectTransform(camera.transform);
 
     const cameraTransformUI = {
         translation: {
-            x: cameraTransform._translation.x,
-            y: cameraTransform._translation.y,
+            x: cameraTransform.translation.x,
+            y: cameraTransform.translation.y,
         },
-        rotation: cameraTransform._rotation,
+        rotation: cameraTransform.rotation,
         scale: {
-            x: cameraTransform._scale.x,
-            y: cameraTransform._scale.y,
+            x: cameraTransform.scale.x,
+            y: cameraTransform.scale.y,
         },
     };
     return {
