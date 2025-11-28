@@ -276,11 +276,12 @@ export class RaymondCanvas extends Canvas {
                 size: vec_mul(worldSize, 5),
             });
 
-            // TODO: This is just an awkward way of copying. Remove once Transform is no longer a class.
-            const from = fromObjectTransform(
-                toObjectTransform(state.camera.transform)
-            );
-            state.cameraPath = { from, to: c.transform, time: 0, end: 1.5 };
+            state.cameraPath = {
+                from: { ...state.camera.transform },
+                to: c.transform,
+                time: 0,
+                end: 1.5,
+            };
         }
     }
 

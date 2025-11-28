@@ -1,5 +1,4 @@
 import {
-    mat3_inverse,
     mat3_mul_vec,
     mat3_transpose,
     newPoint,
