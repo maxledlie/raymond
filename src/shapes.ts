@@ -1,4 +1,6 @@
 import {
+    mat3_mul_vec,
+    mat3_transpose,
     newPoint,
     newVector,
     type Vec3,
@@ -7,7 +9,7 @@ import {
     vec_normalize,
     vec_sub,
 } from "./math.js";
-import Transform from "./transform.js";
+import { type Transform, apply, inverse } from "./transform.js";
 import type { Ray } from "./types.js";
 
 const EPS = 0.00001;
@@ -40,23 +42,31 @@ export abstract class Shape {
     intersect(ray: Ray): number[] {
         // Transform the ray to the shape's local space
         const rayLocal: Ray = {
-            start: this.transform.applyInverse(ray.start),
-            direction: this.transform.applyInverse(ray.direction),
+            start: apply(inverse(this.transform), ray.start),
+            direction: apply(inverse(this.transform), ray.direction),
         };
         return this._intersectLocal(rayLocal);
     }
 
     normalAt(pointWorld: Vec3): Vec3 {
         // Transform point from world space to local space, then normal from local back to world
-        const pointLocal = this.transform.applyInverse(pointWorld);
+        const pointLocal = apply(inverse(this.transform), pointWorld);
         const normalLocal = this._normalAtLocal(pointLocal);
-        const normalWorld = this.transform.applyInverseTranspose(normalLocal);
+
+        const inv = inverse(this.transform);
+
+        let normalWorld: Vec3 = { ...normalLocal };
+        if (inv) {
+            const inv_transpose = mat3_transpose(inv);
+            normalWorld = mat3_mul_vec(inv_transpose, normalLocal);
+        }
+
         normalWorld.w = 0;
         return vec_normalize(normalWorld);
     }
 
     hitTest(pointWorld: Vec3): boolean {
-        const pointLocal = this.transform.applyInverse(pointWorld);
+        const pointLocal = apply(inverse(this.transform), pointWorld);
         return this._hitTest(pointLocal);
     }
 }

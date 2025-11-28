@@ -1,7 +1,7 @@
 import type Camera from "./camera";
 import type { Vec3 } from "./math";
 import type { Shape } from "./shapes";
-import type Transform from "./transform";
+import { type Transform } from "./transform";
 
 export interface RaymondState {
     debug: boolean;

@@ -2,103 +2,124 @@ import {
     mat3_chain,
     mat3_inverse,
     mat3_mul_vec,
-    rotation,
-    translation,
-    scale,
     type Vec3,
     newVector,
     type Mat3,
-    mat3_transpose,
     vec_add,
     vec_mul,
 } from "./math.js";
 
-export default class Transform {
-    _rotation: number = 0;
-    _scale: Vec3 = newVector(1, 1);
-    _translation: Vec3 = newVector(0, 0);
+export interface ObjectTransform {
+    scale: Vec3;
+    rotation: number;
+    translation: Vec3;
+}
 
-    inverse(): Transform {
-        const inv = new Transform();
-        inv.setMatrix(mat3_inverse(this.getMatrix())!);
-        return inv;
-    }
+export type Transform = Mat3;
 
-    rotate(theta: number) {
-        this._rotation += theta;
-    }
+/** Converts an object transform to the more general form of a matrix transform. */
+export function fromObjectTransform(t: ObjectTransform): Transform {
+    return mat3_chain([
+        translation(t.translation.x, t.translation.y),
+        rotation(t.rotation),
+        scaling(t.scale.x, t.scale.y),
+    ]);
+}
 
-    scale(x: number, y?: number) {
-        const _y = y ?? x;
-        this._scale.x *= x;
-        this._scale.y *= _y;
-    }
+/** Converts a general matrix transform to an object transform, assuming no shear. */
+export function toObjectTransform(t: Transform): ObjectTransform {
+    const [a, b, tx] = [...t[0]];
+    const [c, d, ty] = [...t[1]];
 
-    translate(x: number, y: number) {
-        this._translation.x += x;
-        this._translation.y += y;
-    }
+    // Extract translation, scale and rotation of new matrix
+    const rotation = Math.atan2(c, a);
 
-    setMatrix(matrix: Mat3) {
-        const [a, b, tx] = [...matrix[0]];
-        const [c, d, ty] = [...matrix[1]];
+    const scaleX = Math.sqrt(a * a + c * c);
+    const scaleY = (a * d - b * c) / scaleX;
+    const scale = newVector(scaleX, scaleY);
 
-        // Extract translation, scale and rotation of new matrix
-        this._rotation = Math.atan2(c, a);
+    const translation = newVector(tx, ty);
 
-        const scaleX = Math.sqrt(a * a + c * c);
-        const scaleY = (a * d - b * c) / scaleX;
-        this._scale = newVector(scaleX, scaleY);
+    return {
+        scale,
+        rotation,
+        translation,
+    };
+}
 
-        this._translation = newVector(tx, ty);
-    }
+export function inverse(transform: Transform): Transform {
+    return mat3_inverse(transform) ?? transform;
+}
 
-    getMatrix(): Mat3 {
-        return mat3_chain([
-            translation(this._translation.x, this._translation.y),
-            rotation(this._rotation),
-            scale(this._scale.x, this._scale.y),
-        ]);
-    }
+export function apply(transform: Transform, vec: Vec3): Vec3 {
+    return mat3_mul_vec(transform, vec);
+}
 
-    apply(v: Vec3): Vec3 {
-        return mat3_mul_vec(this.getMatrix(), v);
-    }
+/** Linearly interpolates the scale, translation and rotations of the two transforms,
+ *  allowing for smooth animation between the two. **/
+export function interp(a: Transform, b: Transform, x: number) {
+    const oa = toObjectTransform(a);
+    const ob = toObjectTransform(b);
+    const rotation = (1 - x) * oa.rotation + x * ob.rotation;
+    const scale = vec_add(vec_mul(oa.scale, 1 - x), vec_mul(ob.scale, x));
+    const translation = vec_add(
+        vec_mul(oa.translation, 1 - x),
+        vec_mul(ob.translation, x)
+    );
+    return fromObjectTransform({ scale, rotation, translation });
+}
 
-    applyTranspose(v: Vec3): Vec3 {
-        const mat = this.getMatrix();
-        const transpose = mat3_transpose(mat);
-        return mat3_mul_vec(transpose, v);
-    }
+export function translation(tx: number, ty: number): Mat3 {
+    return [
+        [1, 0, tx],
+        [0, 1, ty],
+        [0, 0, 1],
+    ];
+}
 
-    applyInverse(v: Vec3): Vec3 {
-        const mat = this.getMatrix();
-        const inv = mat3_inverse(mat);
-        return inv ? mat3_mul_vec(inv, v) : v;
-    }
+export function rotation(theta: number): Mat3 {
+    const c = Math.cos(theta);
+    const s = Math.sin(theta);
+    return [
+        [c, -s, 0],
+        [s, c, 0],
+        [0, 0, 1],
+    ];
+}
 
-    applyInverseTranspose(v: Vec3): Vec3 {
-        const mat = this.getMatrix();
-        const inv = mat3_inverse(mat);
-        if (!inv) {
-            return v;
-        }
+export function scaling(sx: number, sy?: number): Mat3 {
+    const _sy = typeof sy === "number" ? sy : sx;
+    return [
+        [sx, 0, 0],
+        [0, _sy, 0],
+        [0, 0, 1],
+    ];
+}
 
-        const inv_transpose = mat3_transpose(inv);
-        return mat3_mul_vec(inv_transpose, v);
-    }
+// Helpers for rotating, scaling and translating object transforms.
+export function transformObject(
+    t: Transform,
+    f: (o: ObjectTransform) => ObjectTransform
+) {
+    const o = toObjectTransform(t);
+    const oNew = f(o);
+    return fromObjectTransform(oNew);
+}
 
-    static interp(a: Transform, b: Transform, x: number) {
-        const r = (1 - x) * a._rotation + x * b._rotation;
-        const s = vec_add(vec_mul(a._scale, 1 - x), vec_mul(b._scale, x));
-        const t = vec_add(
-            vec_mul(a._translation, 1 - x),
-            vec_mul(b._translation, x)
-        );
-        const ret = new Transform();
-        ret.rotate(r);
-        ret.scale(s.x, s.y);
-        ret.translate(t.x, t.y);
-        return ret;
-    }
+export function rotateObject(t: Transform, theta: number): Transform {
+    return transformObject(t, (o) => ({ ...o, rotation: o.rotation + theta }));
+}
+
+export function translateObject(t: Transform, delta: Vec3): Transform {
+    return transformObject(t, (o) => ({
+        ...o,
+        translation: vec_add(o.translation, delta),
+    }));
+}
+
+export function scaleObject(t: Transform, scale: Vec3): Transform {
+    return transformObject(t, (o) => ({
+        ...o,
+        scale: newVector(o.scale.x * scale.x, o.scale.y * scale.y),
+    }));
 }

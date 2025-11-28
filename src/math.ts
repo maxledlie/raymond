@@ -97,44 +97,6 @@ export function mat3_equal(a: Mat3, b: Mat3) {
     return true;
 }
 
-export function translation(tx: number, ty: number): Mat3 {
-    return [
-        [1, 0, tx],
-        [0, 1, ty],
-        [0, 0, 1],
-    ];
-}
-
-export function rotation(theta: number): Mat3 {
-    const c = Math.cos(theta);
-    const s = Math.sin(theta);
-    return [
-        [c, -s, 0],
-        [s, c, 0],
-        [0, 0, 1],
-    ];
-}
-
-export function scale(sx: number, sy?: number): Mat3 {
-    const _sy = typeof sy === "number" ? sy : sx;
-    return [
-        [sx, 0, 0],
-        [0, _sy, 0],
-        [0, 0, 1],
-    ];
-}
-
-/**
- * Shear in X and Y. shx is x shear (x' = x + shx * y). shy is y shear (y' = y + shy * x).
- */
-export function shear(shx: number, shy: number): Mat3 {
-    return [
-        [1, shx, 0],
-        [shy, 1, 0],
-        [0, 0, 1],
-    ];
-}
-
 export function mat3_mul_mat(a: Mat3, b: Mat3): Mat3 {
     const res: Mat3 = [
         [0, 0, 0],
