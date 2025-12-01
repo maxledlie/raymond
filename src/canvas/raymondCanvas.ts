@@ -21,11 +21,10 @@ import {
     inverse,
     fromObjectTransform,
     toObjectTransform,
-    transformObject,
-    translateObject,
 } from "../transform.js";
 import type { Ray, Laser } from "../types.js";
 import { Canvas } from "./canvas.js";
+import SelectionLayer from "./selection.js";
 
 type ToolType = "laser" | "quad" | "circle" | "pan" | "select";
 
@@ -50,13 +49,6 @@ interface RaySegment {
     end: Vec3;
 }
 
-type HandleAction = "scale" | "rotate";
-
-interface Handle {
-    position: Vec3;
-    action: HandleAction;
-}
-
 interface Animation {
     from: Transform;
     to: Transform;
@@ -69,17 +61,11 @@ interface State {
     camera: Camera;
     tool: ToolType;
     shapes: Shape[];
-    selectedShapeIndex: number | null;
     lastMousePos: Vec3;
     isMouseDown: boolean;
     placementStartWorld: Vec3 | null;
     panStart: Vec3 | null;
-    mousePosScreen: Vec3;
     lasers: Laser[];
-    /** Is the currently selected shape being dragged? */
-    shapeDragged: boolean;
-    /** Which `handle` of the currently selected shape is being interacted with? By convention, 0 is the rotation handle, 1-8 the scale handles. */
-    activeHandleIndex: number | null;
     cameraPath: Animation | null;
 }
 
@@ -93,20 +79,25 @@ function defaultState(): State {
         tool: "laser",
         lasers: [],
         shapes: [],
-        selectedShapeIndex: null,
-        shapeDragged: false,
-        activeHandleIndex: null,
         camera: new Camera(1, 1), // We don't know the screen width and height yet.
-        mousePosScreen: newPoint(0, 0),
         cameraPath: null,
     };
 }
 
 export class RaymondCanvas extends Canvas {
     state: State = defaultState();
+    selectionLayer: SelectionLayer = new SelectionLayer(
+        this.state.shapes,
+        this.state.camera
+    );
 
     setup() {
+        // We have to set these again once things are initialised.
         this.state.camera = new Camera(this.width, this.height);
+        this.selectionLayer = new SelectionLayer(
+            this.state.shapes,
+            this.state.camera
+        );
     }
 
     keyPressed(e: KeyboardEvent): void {
@@ -114,9 +105,12 @@ export class RaymondCanvas extends Canvas {
         if (e.key.toUpperCase() === "D") {
             state.debug = !state.debug;
         }
-        if (e.key === "Delete" && state.selectedShapeIndex != null) {
-            state.shapes.splice(state.selectedShapeIndex, 1);
-            state.selectedShapeIndex = null;
+        if (
+            e.key === "Delete" &&
+            this.selectionLayer.selectedShapeIndex != null
+        ) {
+            state.shapes.splice(this.selectionLayer.selectedShapeIndex, 1);
+            this.selectionLayer.shapeDeleted();
         }
         for (const tool of tools) {
             if (e.key.toUpperCase() === tool.hotkey.toUpperCase()) {
@@ -136,63 +130,27 @@ export class RaymondCanvas extends Canvas {
 
         if (e.button === 0) {
             if (state.tool === "select") {
-                // Activate a handle if one is hovered
-                if (state.selectedShapeIndex != null) {
-                    const selectedShape =
-                        state.shapes[state.selectedShapeIndex];
-                    const { rotation, scale } = this.computeHandles(
-                        state,
-                        selectedShape
-                    );
-                    for (const [index, handle] of [
-                        rotation,
-                        ...scale,
-                    ].entries()) {
-                        if (
-                            vec_magnitude(
-                                vec_sub(handle.position, mouseScreen)
-                            ) < 10
-                        ) {
-                            state.activeHandleIndex = index;
-                            break;
-                        }
-                    }
-                }
-
-                // Select the most-recently-placed object that we are currently hovering over
-                let selectionIndex = -1;
-                for (let i = state.shapes.length - 1; i >= 0; i--) {
-                    if (state.shapes[i].hitTest(mouseWorld)) {
-                        selectionIndex = i;
-                    }
-                }
-                if (selectionIndex >= 0) {
-                    state.selectedShapeIndex = selectionIndex;
-                    state.shapeDragged = true;
-                }
+                this.selectionLayer.mouseDown(mouseScreen);
             } else {
                 state.placementStartWorld = mouseWorld;
             }
         }
         if (e.button === 1 || state.tool === "pan") {
-            console.log("pan start");
             state.panStart = mouseScreen;
         }
     }
 
     mouseWheel(e: WheelEvent): void {
-        console.log("wheel event: ", e);
         const { state } = this;
         const zoomSpeed = 0.0001;
         const zoomFrac = zoomSpeed * e.deltaY;
-        state.camera.zoom(zoomFrac, state.mousePosScreen);
+        state.camera.zoom(zoomFrac, newPoint(this.mouseX, this.mouseY));
     }
 
     mouseReleased(e: MouseEvent): void {
         const { state } = this;
         state.isMouseDown = false;
-        state.shapeDragged = false;
-        state.activeHandleIndex = null;
+        this.selectionLayer.mouseUp();
         if (e.button === 0) {
             if (state.tool === "laser") {
                 const previewLaser = this.computePreviewLaser();
@@ -213,50 +171,17 @@ export class RaymondCanvas extends Canvas {
     }
 
     mouseMoved(e: MouseEvent): void {
-        const { state } = this;
-
-        state.mousePosScreen = newPoint(this.mouseX, this.mouseY);
-
-        // Rotate or scale shape if dragging a handle
-        if (state.selectedShapeIndex != null && state.activeHandleIndex == 0) {
-            // We are rotating the shape. The centre of the shape, top of the shape, and mouse position should be collinear.
-            const shape = state.shapes[state.selectedShapeIndex];
-            const shapeCentreWorld = apply(shape.transform, newPoint(0, 0));
-            const mouseWorld = state.camera.screenToWorld(state.mousePosScreen);
-            const d = vec_sub(mouseWorld, shapeCentreWorld);
-            const theta = Math.atan2(d.y, d.x);
-            shape.transform = transformObject(shape.transform, (o) => ({
-                ...o,
-                rotation: theta - Math.PI / 2,
-            }));
-        }
-
-        // Drag selected shape
-        if (
-            state.isMouseDown &&
-            state.tool === "select" &&
-            state.selectedShapeIndex != null &&
-            state.shapes.length > state.selectedShapeIndex &&
-            state.shapeDragged
-        ) {
-            const selectedShape = state.shapes[state.selectedShapeIndex];
-
-            const dragEndScreen = newPoint(e.offsetX, e.offsetY);
-            const dragMovementScreen = newVector(e.movementX, e.movementY);
-            const dragStartScreen = vec_sub(dragEndScreen, dragMovementScreen);
-            const dragEndWorld = state.camera.screenToWorld(dragEndScreen);
-            const dragStartWorld = state.camera.screenToWorld(dragStartScreen);
-            const dragDelta = vec_sub(dragEndWorld, dragStartWorld);
-            selectedShape.transform = translateObject(
-                selectedShape.transform,
-                dragDelta
-            );
-        }
+        const dragEndScreen = newPoint(e.offsetX, e.offsetY);
+        const dragStartScreen = vec_sub(
+            dragEndScreen,
+            newVector(e.movementX, e.movementY)
+        );
+        this.selectionLayer.mouseMoved(dragStartScreen, dragEndScreen);
     }
 
     doubleClicked() {
         const { state } = this;
-        const shape = state.shapes[state.selectedShapeIndex ?? -1];
+        const shape = this.selectionLayer.getSelectedShape();
 
         if (shape) {
             // Position the camera such that the shape's bounding box appears to be a unit square at the center of the screen
@@ -325,7 +250,7 @@ export class RaymondCanvas extends Canvas {
         }
 
         const mouseScreen = newPoint(this.mouseX, this.mouseY);
-        const mouseWorld = state.camera.screenToWorld(state.mousePosScreen);
+        const mouseWorld = state.camera.screenToWorld(mouseScreen);
 
         // Draw status indicators
         ctx.textAlign = "right";
@@ -373,18 +298,18 @@ export class RaymondCanvas extends Canvas {
 
         // Draw lasers including preview laser
         for (const laser of lasers) {
-            const hovered = this.hitTestLaser(laser, state.mousePosScreen);
+            const hovered = this.hitTestLaser(laser, mouseScreen);
             this.drawLaser(ctx, laser, hovered);
         }
 
         // Draw shapes including preview shape
         for (const shape of shapes) {
-            const hovered = this.hitTestShape(shape, state.mousePosScreen);
+            const hovered = this.hitTestShape(shape, mouseScreen);
             this.drawShape(shape, hovered);
         }
 
         // Draw selection box and handles for selected shape
-        this.drawSelectionBox();
+        this.selectionLayer.draw(this.ctx);
 
         // Work out the segments to actually draw
         const segments: RaySegment[] = [];
@@ -429,66 +354,6 @@ export class RaymondCanvas extends Canvas {
         }
 
         state.lastMousePos = mouseScreen;
-    }
-
-    drawSelectionBox() {
-        const { state, ctx } = this;
-
-        if (state.selectedShapeIndex == null) {
-            return;
-        }
-
-        const shape = state.shapes[state.selectedShapeIndex];
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 2;
-
-        // Draw bounding box around shape
-        const points = [];
-        for (const local of [
-            newPoint(-1, 1),
-            newPoint(1, 1),
-            newPoint(1, -1),
-            newPoint(-1, -1),
-        ]) {
-            const world = apply(shape.transform, local);
-            const screen = state.camera.worldToScreen(world);
-            points.push(screen);
-        }
-
-        ctx.beginPath();
-        ctx.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; i++) {
-            ctx.lineTo(points[i].x, points[i].y);
-        }
-        ctx.closePath();
-        ctx.stroke();
-
-        const { rotation, scale } = this.computeHandles(state, shape);
-
-        const topScreen = state.camera.worldToScreen(
-            apply(shape.transform, newPoint(0, 1))
-        );
-
-        ctx.beginPath();
-        ctx.moveTo(rotation.position.x, rotation.position.y);
-        ctx.lineTo(topScreen.x, topScreen.y);
-        ctx.stroke();
-
-        ctx.strokeStyle = "black";
-        for (const [i, p] of scale.entries()) {
-            ctx.fillStyle =
-                state.activeHandleIndex === i + 1 ? "green" : "white";
-            ctx.beginPath();
-            ctx.arc(p.position.x, p.position.y, 5, 0, 2 * Math.PI);
-            ctx.fill();
-            ctx.stroke();
-        }
-
-        ctx.fillStyle = state.activeHandleIndex === 0 ? "green" : "white";
-        ctx.beginPath();
-        ctx.arc(rotation.position.x, rotation.position.y, 5, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.stroke();
     }
 
     /** Draws a line described in world space using the current camera transform and canvas drawing state */
@@ -558,49 +423,6 @@ export class RaymondCanvas extends Canvas {
         }
 
         ctx.setTransform(oldTransform);
-    }
-
-    /**
-     * Returns the handles that should be drawn around the given shape, assuming it's selected
-     */
-    computeHandles(
-        state: State,
-        shape: Shape
-    ): { rotation: Handle; scale: Handle[] } {
-        // Handles at each vertex and at the center of each line of the bounding box
-        const handlesLocal = [
-            newPoint(-1, 1),
-            newPoint(0, 1),
-            newPoint(1, 1),
-            newPoint(1, 0),
-            newPoint(1, -1),
-            newPoint(0, -1),
-            newPoint(-1, -1),
-            newPoint(-1, 0),
-        ];
-
-        const scaleHandlesPos = handlesLocal.map((x) =>
-            state.camera.worldToScreen(apply(shape.transform, x))
-        );
-
-        const centreScreen = state.camera.worldToScreen(
-            apply(shape.transform, newPoint(0, 0))
-        );
-        const topScreen = state.camera.worldToScreen(
-            apply(shape.transform, newPoint(0, 1))
-        );
-        const d = vec_normalize(vec_sub(topScreen, centreScreen));
-        const rotationHandlePos = vec_add(topScreen, vec_mul(d, 30));
-
-        const scale: Handle[] = scaleHandlesPos.map((x) => ({
-            position: x,
-            action: "scale",
-        }));
-        const rotation: Handle = {
-            position: rotationHandlePos,
-            action: "rotate",
-        };
-        return { rotation, scale };
     }
 
     drawLaser(ctx: CanvasRenderingContext2D, laser: Laser, hovered: boolean) {
@@ -736,8 +558,12 @@ export class RaymondCanvas extends Canvas {
             state.placementStartWorld
         );
         if (
-            vec_magnitude(vec_sub(placementStartScreen, state.mousePosScreen)) <
-            5
+            vec_magnitude(
+                vec_sub(
+                    placementStartScreen,
+                    newPoint(this.mouseX, this.mouseY)
+                )
+            ) < 5
         ) {
             return null;
         }
@@ -757,7 +583,9 @@ export class RaymondCanvas extends Canvas {
      **/
     computePreviewQuad(placementStart: Vec3): Shape | null {
         const { state } = this;
-        const endWorld = state.camera.screenToWorld(state.mousePosScreen);
+        const endWorld = state.camera.screenToWorld(
+            newPoint(this.mouseX, this.mouseY)
+        );
         const startWorld = placementStart;
 
         const width = Math.abs(endWorld.x - startWorld.x);
@@ -778,7 +606,9 @@ export class RaymondCanvas extends Canvas {
      */
     computePreviewCircle(placementStart: Vec3): Circle | null {
         const { state } = this;
-        const endWorld = state.camera.screenToWorld(state.mousePosScreen);
+        const endWorld = state.camera.screenToWorld(
+            newPoint(this.mouseX, this.mouseY)
+        );
         const startWorld = placementStart;
 
         const width = Math.abs(endWorld.x - startWorld.x);
@@ -802,7 +632,9 @@ export class RaymondCanvas extends Canvas {
         if (state.placementStartWorld == null || state.tool !== "laser") {
             return null;
         }
-        const end = state.camera.screenToWorld(state.mousePosScreen);
+        const end = state.camera.screenToWorld(
+            newPoint(this.mouseX, this.mouseY)
+        );
         const dir = vec_sub(end, state.placementStartWorld);
         const theta = Math.atan2(dir.y, dir.x);
         const transform = fromObjectTransform({
