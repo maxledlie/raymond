@@ -378,10 +378,13 @@ export class RaymondCanvas extends Canvas {
         }
 
         // Draw shapes including preview shape
-        for (const [i, shape] of shapes.entries()) {
+        for (const shape of shapes) {
             const hovered = this.hitTestShape(shape, state.mousePosScreen);
-            this.drawShape(ctx, shape, hovered, i === state.selectedShapeIndex);
+            this.drawShape(shape, hovered);
         }
+
+        // Draw selection box and handles for selected shape
+        this.drawSelectionBox();
 
         // Work out the segments to actually draw
         const segments: RaySegment[] = [];
@@ -428,6 +431,66 @@ export class RaymondCanvas extends Canvas {
         state.lastMousePos = mouseScreen;
     }
 
+    drawSelectionBox() {
+        const { state, ctx } = this;
+
+        if (state.selectedShapeIndex == null) {
+            return;
+        }
+
+        const shape = state.shapes[state.selectedShapeIndex];
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+
+        // Draw bounding box around shape
+        const points = [];
+        for (const local of [
+            newPoint(-1, 1),
+            newPoint(1, 1),
+            newPoint(1, -1),
+            newPoint(-1, -1),
+        ]) {
+            const world = apply(shape.transform, local);
+            const screen = state.camera.worldToScreen(world);
+            points.push(screen);
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        const { rotation, scale } = this.computeHandles(state, shape);
+
+        const topScreen = state.camera.worldToScreen(
+            apply(shape.transform, newPoint(0, 1))
+        );
+
+        ctx.beginPath();
+        ctx.moveTo(rotation.position.x, rotation.position.y);
+        ctx.lineTo(topScreen.x, topScreen.y);
+        ctx.stroke();
+
+        ctx.strokeStyle = "black";
+        for (const [i, p] of scale.entries()) {
+            ctx.fillStyle =
+                state.activeHandleIndex === i + 1 ? "green" : "white";
+            ctx.beginPath();
+            ctx.arc(p.position.x, p.position.y, 5, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        ctx.fillStyle = state.activeHandleIndex === 0 ? "green" : "white";
+        ctx.beginPath();
+        ctx.arc(rotation.position.x, rotation.position.y, 5, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+    }
+
     /** Draws a line described in world space using the current camera transform and canvas drawing state */
     drawLine(start: Vec3, end: Vec3) {
         const { state, ctx } = this;
@@ -463,62 +526,38 @@ export class RaymondCanvas extends Canvas {
         return vec_sub(inVec, vec_mul(normal, 2 * vec_dot(inVec, normal)));
     }
 
-    drawShape(
-        ctx: CanvasRenderingContext2D,
-        shape: Shape,
-        hovered: boolean,
-        selected: boolean
-    ) {
-        // TODO: Should this be made an abstract method of the `Shape` class?
+    drawShape(shape: Shape, hovered: boolean) {
+        const { state, ctx } = this;
+        if (hovered && state.debug) {
+            const majorColor = this.color(100, 100, 255, 255);
+            const minorColor = this.color(100, 100, 255, 200);
+            this.drawCoordinates(shape.transform, majorColor, minorColor, 2);
+        }
 
-        const { state } = this;
+        ctx.fillStyle = "lightblue";
+        const oldTransform = ctx.getTransform();
 
-        // Draw actual shape
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = selected ? 5 : 0;
+        // Get the combination of object and camera transforms
+        const mat = mat3_mul_mat(state.camera.transform, shape.transform);
+        ctx.setTransform(
+            mat[0][0],
+            mat[1][0],
+            mat[0][1],
+            mat[1][1],
+            mat[0][2],
+            mat[1][2]
+        );
+
         switch (shape.type()) {
             case "quad":
-                this.drawQuad(shape as Quad, hovered, true);
+                this.drawQuad();
                 break;
             case "circle":
-                this.drawCircle(shape as Circle, hovered);
+                this.drawCircle();
                 break;
         }
 
-        // Draw annotations if selected
-        if (selected) {
-            ctx.strokeStyle = "white";
-            ctx.lineWidth = 1;
-            this.drawQuad(shape as Quad, false, false);
-
-            const { rotation, scale } = this.computeHandles(state, shape);
-
-            ctx.beginPath();
-            ctx.moveTo(rotation.position.x, rotation.position.y);
-            ctx.lineTo(rotation.position.x, rotation.position.y);
-            ctx.stroke();
-            ctx.strokeStyle = "black";
-            for (const [i, p] of scale.entries()) {
-                ctx.fillStyle =
-                    state.activeHandleIndex === i + 1 ? "green" : "white";
-                ctx.beginPath();
-                ctx.arc(p.position.x, p.position.y, 5, 0, 2 * Math.PI);
-                ctx.fill();
-                ctx.stroke();
-            }
-
-            ctx.fillStyle = state.activeHandleIndex === 0 ? "green" : "white";
-            ctx.beginPath();
-            ctx.arc(
-                rotation.position.x,
-                rotation.position.y,
-                5,
-                0,
-                2 * Math.PI
-            );
-            ctx.fill();
-            ctx.stroke();
-        }
+        ctx.setTransform(oldTransform);
     }
 
     /**
@@ -599,66 +638,15 @@ export class RaymondCanvas extends Canvas {
         ctx.lineWidth = 1;
     }
 
-    drawQuad(quad: Quad, hovered: boolean, fill: boolean) {
-        const { state, ctx } = this;
-        if (hovered && state.debug) {
-            const majorColor = this.color(100, 100, 255, 255);
-            const minorColor = this.color(100, 100, 255, 200);
-            this.drawCoordinates(quad.transform, majorColor, minorColor, 2);
-        }
-
-        ctx.fillStyle = "lightblue";
-        const points = [];
-        for (const local of [
-            newPoint(-1, 1),
-            newPoint(1, 1),
-            newPoint(1, -1),
-            newPoint(-1, -1),
-        ]) {
-            const world = apply(quad.transform, local);
-            const screen = state.camera.worldToScreen(world);
-            points.push(screen);
-        }
-
-        ctx.beginPath();
-        ctx.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; i++) {
-            ctx.lineTo(points[i].x, points[i].y);
-        }
-        ctx.closePath();
-        if (fill) {
-            ctx.fill();
-        }
-        ctx.stroke();
+    drawQuad() {
+        this.ctx.fillRect(-1, -1, 2, 2);
     }
 
-    drawCircle(circle: Circle, hovered: boolean) {
-        const { state, ctx } = this;
-        if (hovered && state.debug) {
-            const majorColor = this.color(100, 100, 255, 255);
-            const minorColor = this.color(100, 100, 255, 200);
-            this.drawCoordinates(circle.transform, majorColor, minorColor, 2);
-        }
-
-        ctx.fillStyle = "lightblue";
-        const oldTransform = ctx.getTransform();
-
-        // Get the combination of object and camera transforms
-        const mat = mat3_mul_mat(state.camera.transform, circle.transform);
-        ctx.setTransform(
-            mat[0][0],
-            mat[1][0],
-            mat[0][1],
-            mat[1][1],
-            mat[0][2],
-            mat[1][2]
-        );
-
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 1, 1, 0, 0, 2 * Math.PI);
-        ctx.closePath();
-        ctx.fill();
-        ctx.setTransform(oldTransform);
+    drawCircle() {
+        this.ctx.beginPath();
+        this.ctx.ellipse(0, 0, 1, 1, 0, 0, 2 * Math.PI);
+        this.ctx.closePath();
+        this.ctx.fill();
     }
 
     /**
