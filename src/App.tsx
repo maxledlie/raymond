@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import type { CameraSetup, Transform as UITransform } from "./uiTypes";
-import { fromObjectTransform, toObjectTransform } from "./transform";
+import {
+    fromObjectTransform,
+    toObjectTransform,
+    type Transform,
+} from "./transform";
 import CameraPanel from "./components/CameraPanel";
 import "./App.css";
 import { RaymondCanvas } from "./canvas/raymondCanvas";
 import { newPoint, newVector } from "./math";
+import { Shape } from "./shapes";
+import ObjectPanel from "./components/ObjectPanel";
 
 function defaultTransform(): UITransform {
     return {
@@ -31,6 +37,8 @@ function App() {
 
     const [cameraSetup, setCameraSetup] =
         useState<CameraSetup>(defaultCameraSetup);
+
+    const [selectedObject, setSelectedObject] = useState<Shape | null>(null);
 
     // Initialise the canvas once the DOM element is ready.
     // The canvas will independently draw its current state every frame, and update its current
@@ -60,6 +68,7 @@ function App() {
             const state = getCanvasState(canvas);
             setCameraTransform(state.cameraTransform);
             setCameraSetup(state.cameraSetup);
+            setSelectedObject(state.selectedShape);
             window.setTimeout(loop, 1000 / 24);
         };
         loop();
@@ -97,12 +106,31 @@ function App() {
                 <div
                     className="ui-panel"
                     style={{
-                        position: "fixed",
+                        top: 0,
+                        right: 0,
+                        height: "50vh",
+                    }}
+                >
+                    {selectedObject && (
+                        <ObjectPanel
+                            transform={serializeTransform(
+                                selectedObject.transform
+                            )}
+                            setTransform={(t) => {
+                                canvas?.setSelectedShapeTransform(
+                                    deserializeTransform(t)
+                                );
+                            }}
+                        />
+                    )}
+                </div>
+
+                <div
+                    className="ui-panel"
+                    style={{
                         bottom: 0,
                         right: 0,
                         height: "50vh",
-                        maxWidth: "100vw",
-                        pointerEvents: "auto",
                     }}
                 >
                     <CameraPanel
@@ -141,6 +169,7 @@ function App() {
 interface CanvasState {
     cameraSetup: CameraSetup;
     cameraTransform: UITransform;
+    selectedShape: Shape | null;
 }
 
 function getCanvasState(canvas: RaymondCanvas): CanvasState {
@@ -148,23 +177,39 @@ function getCanvasState(canvas: RaymondCanvas): CanvasState {
         state: { camera },
     } = canvas;
 
-    const cameraTransform = toObjectTransform(camera.transform);
+    const selectedShape =
+        canvas.selectionLayer.shapes[
+            canvas.selectionLayer.selectedShapeIndex ?? -1
+        ] ?? null;
 
-    const cameraTransformUI = {
-        translation: {
-            x: cameraTransform.translation.x,
-            y: cameraTransform.translation.y,
-        },
-        rotation: cameraTransform.rotation,
-        scale: {
-            x: cameraTransform.scale.x,
-            y: cameraTransform.scale.y,
-        },
-    };
     return {
         cameraSetup: camera.getSetup(),
-        cameraTransform: cameraTransformUI,
+        cameraTransform: serializeTransform(camera.transform),
+        selectedShape,
     };
+}
+
+function serializeTransform(t: Transform): UITransform {
+    const o = toObjectTransform(t);
+    return {
+        translation: {
+            x: o.translation.x,
+            y: o.translation.y,
+        },
+        rotation: o.rotation,
+        scale: {
+            x: o.scale.x,
+            y: o.scale.y,
+        },
+    };
+}
+
+function deserializeTransform(t: UITransform): Transform {
+    return fromObjectTransform({
+        translation: newVector(t.translation.x, t.translation.y),
+        rotation: t.rotation,
+        scale: newVector(t.scale.x, t.scale.y),
+    });
 }
 
 export default App;
