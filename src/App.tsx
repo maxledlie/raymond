@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { CameraSetup, Transform as UITransform } from "./uiTypes";
-import {
-    fromObjectTransform,
-    toObjectTransform,
-} from "./transform";
+import { fromObjectTransform, toObjectTransform } from "./transform";
 import CameraPanel from "./components/CameraPanel";
 import "./App.css";
 import { RaymondCanvas } from "./canvas/raymondCanvas";
