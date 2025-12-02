@@ -197,7 +197,7 @@ export class RaymondCanvas extends Canvas {
             c.setSetup({
                 ...state.camera.getSetup(),
                 center: centerWorld,
-                rotation: -o.rotation,
+                rotation: o.rotation,
                 size: vec_mul(worldSize, 5),
             });
 
@@ -655,5 +655,12 @@ export class RaymondCanvas extends Canvas {
 
     setCameraTransform(transform: Transform) {
         this.state.camera.transform = transform;
+    }
+
+    setSelectedShapeTransform(transform: Transform) {
+        const shape = this.selectionLayer.getSelectedShape();
+        if (shape) {
+            shape.transform = transform;
+        }
     }
 }

@@ -71,7 +71,7 @@ export default class Camera {
 
         // --- 2. World→screen rotation ---
         // Camera rotation is opposite the world→screen rotation.
-        const worldToScreenRotation = -s.rotation;
+        const worldToScreenRotation = s.rotation;
 
         // --- 3. Build the matrix: M = T_screenCenter * R * S * T(-center) ---
         const screenCenter = translation(
@@ -117,7 +117,7 @@ export default class Camera {
 
         return {
             center: centerWorld,
-            rotation: -rotation,
+            rotation: rotation,
             size: newVector(width, height),
         };
     }
