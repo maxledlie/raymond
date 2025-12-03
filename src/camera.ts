@@ -2,10 +2,9 @@ import {
     mat3_chain,
     mat3_identity,
     mat3_inverse,
-    newPoint,
     newVector,
-    vec_magnitude,
-    vec_sub,
+    vec_add,
+    vec_mul,
     type Vec3,
 } from "./math.js";
 import {
@@ -13,9 +12,7 @@ import {
     apply,
     inverse,
     fromObjectTransform,
-    rotation,
     scaling,
-    toObjectTransform,
     translation,
     translateObject,
 } from "./transform.js";
@@ -56,69 +53,67 @@ export default class Camera {
     }
 
     setSetup(s: CameraSetup) {
-        // Guard against nonsense sizes
-        if (s.size.x === 0 || s.size.y === 0) {
-            return;
-        }
+        const cos = Math.cos(s.rotation);
+        const sin = Math.sin(s.rotation);
 
-        // --- 1. Choose scale (pixels per world unit) ---
-        // We keep *uniform* scale so the camera doesn't shear.
-        // This assumes s.size keeps the same aspect ratio as the screen
-        // (which getSetup always does).
+        // scale from world-units-in-camera-space to pixels
+        const sx = this.screenWidth / s.size.x; // world width -> viewport width
+        const sy = this.screenHeight / s.size.y; // world height -> viewport height
 
-        const sx = this.screenWidth / s.size.x;
-        const sy = -this.screenHeight / s.size.y;
+        const m00 = sx * cos;
+        const m01 = sx * sin;
+        const m02 = -s.center.x * m00 - s.center.y * m01 + this.screenWidth / 2;
 
-        // --- 2. World→screen rotation ---
-        // Camera rotation is opposite the world→screen rotation.
-        const worldToScreenRotation = s.rotation;
+        const m10 = sy * sin;
+        const m11 = -sy * cos; // minus to flip Y so screen y is down
+        const m12 =
+            -s.center.x * m10 - s.center.y * m11 + this.screenHeight / 2;
 
-        // --- 3. Build the matrix: M = T_screenCenter * R * S * T(-center) ---
-        const screenCenter = translation(
-            this.screenWidth / 2,
-            this.screenHeight / 2
-        );
-
-        const moveWorldCenterToOrigin = translation(-s.center.x, -s.center.y);
-
-        const rot = rotation(worldToScreenRotation);
-        const scl = scaling(sx, sy);
-
-        const mat = mat3_chain([
-            screenCenter, // move origin to screen centre
-            rot, // rotate world to screen orientation
-            scl, // scale world units → pixels (and flip Y)
-            moveWorldCenterToOrigin, // put camera centre at origin first
-        ]);
-
-        this.transform = mat;
+        this.transform = [
+            [m00, m01, m02],
+            [m10, m11, m12],
+            [0, 0, 1],
+        ];
     }
 
     getSetup(): CameraSetup {
-        const centerScreen = newPoint(
-            this.screenWidth / 2,
-            this.screenHeight / 2
-        );
-        const centerWorld = apply(inverse(this.transform), centerScreen);
-        const { rotation } = toObjectTransform(this.transform);
+        const [[m00, m01, m02], [m10, m11, m12], [_m20, _m21, _m22]] =
+            this.transform;
 
-        const topLeftWorld = apply(inverse(this.transform), newPoint(0, 0));
-        const topRightWorld = apply(
-            inverse(this.transform),
-            newPoint(this.screenWidth, 0)
-        );
-        const width = vec_magnitude(vec_sub(topRightWorld, topLeftWorld));
+        // Extract scales (sx, sy) from the rotation+scale part.
+        const sx = Math.hypot(m00, m01); // = viewportWidth / size.x
+        const sy = Math.hypot(m10, m11); // = viewportHeight / size.y
 
-        const bottomLeftWorld = apply(
-            inverse(this.transform),
-            newPoint(0, this.screenHeight)
-        );
-        const height = vec_magnitude(vec_sub(bottomLeftWorld, topLeftWorld));
+        if (sx === 0 || sy === 0) {
+            throw new Error("Non-invertible camera matrix: zero scale.");
+        }
+
+        // Recover rotation.
+        const rotation = Math.atan2(m01, m00);
+
+        // Recover size from scales.
+        const sizeX = this.screenWidth / sx;
+        const sizeY = this.screenHeight / sy;
+
+        // Solve for center:
+        const b0 = this.screenWidth / 2 - m02;
+        const b1 = this.screenHeight / 2 - m12;
+
+        const det = m00 * m11 - m01 * m10;
+        const eps = 1e-12;
+        if (Math.abs(det) < eps) {
+            throw new Error(
+                "Non-invertible camera matrix: rotation/scale block is singular."
+            );
+        }
+
+        const cx = (b0 * m11 - b1 * m01) / det;
+        const cy = (m00 * b1 - m10 * b0) / det;
 
         return {
-            center: centerWorld,
-            rotation: rotation,
-            size: newVector(width, height),
+            center: { x: cx, y: cy, w: 1 },
+            size: { x: sizeX, y: sizeY, w: 0 },
+            rotation,
         };
     }
 
@@ -150,6 +145,38 @@ export default class Camera {
      * Pans the camera the given distance in screen space
      */
     pan(delta: Vec3) {
-        this.transform = translateObject(this.transform, delta);
+        const deltaWorld = this.screenToWorld(vec_mul(delta, -1));
+        console.log("deltaWorld: ", deltaWorld);
+        const setup = this.getSetup();
+        this.setSetup({ ...setup, center: vec_add(setup.center, deltaWorld) });
+    }
+
+    static interpSetup(a: CameraSetup, b: CameraSetup, x: number): CameraSetup {
+        // Clamp x to [0, 1]
+        const t = Math.max(0, Math.min(1, x));
+
+        // Decompose both cameras into CameraSetup parameters
+
+        // Interpolate rotation safely (optionally handle wrap-around)
+        let dRot = b.rotation - a.rotation;
+        // Wrap shortest path around ±π
+        if (dRot > Math.PI) dRot -= 2 * Math.PI;
+        else if (dRot < -Math.PI) dRot += 2 * Math.PI;
+
+        const rotation = a.rotation + t * dRot;
+
+        // Interpolate position and size
+        const center = {
+            x: a.center.x + t * (b.center.x - a.center.x),
+            y: a.center.y + t * (b.center.y - a.center.y),
+            w: 1,
+        };
+        const size = {
+            x: a.size.x + t * (b.size.x - a.size.x),
+            y: a.size.y + t * (b.size.y - a.size.y),
+            w: 0,
+        };
+
+        return { center, size, rotation };
     }
 }
