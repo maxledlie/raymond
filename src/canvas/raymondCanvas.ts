@@ -1,4 +1,4 @@
-import Camera from "../camera.js";
+import Camera, { type CameraSetup } from "../camera.js";
 import {
     type Vec3,
     vec_add,
@@ -12,6 +12,8 @@ import {
     vec_magnitude,
     mat3_mul_mat,
     mat3_identity,
+    mat3_inverse,
+    mat3_chain,
 } from "../math.js";
 import { Shape, type Intersection, Quad, Circle } from "../shapes.js";
 import {
@@ -50,8 +52,8 @@ interface RaySegment {
 }
 
 interface Animation {
-    from: Transform;
-    to: Transform;
+    from: CameraSetup;
+    to: CameraSetup;
     time: number;
     end: number;
 }
@@ -185,33 +187,26 @@ export class RaymondCanvas extends Canvas {
 
         if (shape) {
             // Position the camera such that the shape's bounding box appears to be a unit square at the center of the screen
-            const centerWorld = apply(shape.transform, newPoint(0, 0));
-
             const aspectRatio = this.width / this.height;
-            const worldSize = apply(shape.transform, newVector(aspectRatio, 1));
-
+            const worldCenter = apply(shape.transform, newPoint(0, 0));
             const o = toObjectTransform(shape.transform);
-
-            // HACK: Work out the transform for a camera at the desired orientation
-            const c = new Camera(this.width, this.height);
-            c.setSetup({
-                ...state.camera.getSetup(),
-                center: centerWorld,
+            const target: CameraSetup = {
+                center: worldCenter,
                 rotation: o.rotation,
-                size: vec_mul(worldSize, 5),
-            });
-
+                size: newVector(o.scale.x * aspectRatio * 10, o.scale.y * 10),
+            };
             state.cameraPath = {
-                from: { ...state.camera.transform },
-                to: c.transform,
+                from: { ...state.camera.getSetup() },
+                to: target,
                 time: 0,
-                end: 1.5,
+                end: 2,
             };
         }
     }
 
     smoothstep(x: number): number {
-        return 3 * Math.pow(x, 2) - 2 * Math.pow(x, 3);
+        const f = 3 * Math.pow(x, 2) - 2 * Math.pow(x, 3);
+        return Math.max(0, Math.min(1, f));
     }
 
     draw() {
@@ -226,7 +221,9 @@ export class RaymondCanvas extends Canvas {
                 path.time += 1 / FRAME_RATE;
                 const frac = path.time / path.end;
                 const smoothX = this.smoothstep(frac);
-                state.camera.transform = interp(path.from, path.to, smoothX);
+                state.camera.setSetup(
+                    Camera.interpSetup(path.from, path.to, smoothX)
+                );
             }
         }
 
