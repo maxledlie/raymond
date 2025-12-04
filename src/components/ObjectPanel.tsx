@@ -1,13 +1,18 @@
 import "../App.css";
+import type { Material } from "../shared/material";
 import type { Transform, Vec2 } from "../uiTypes";
 
 export interface ObjectPanelProps {
     transform: Transform;
     setTransform: (transform: Transform) => void;
+	material: Material;
+	setMaterial: (material: Material) => void;
 }
 export default function ObjectPanel({
     transform,
     setTransform,
+	material,
+	setMaterial
 }: ObjectPanelProps) {
     return (
         <div>
@@ -29,6 +34,17 @@ export default function ObjectPanel({
                 vector={transform.scale}
                 setVector={(v) => setTransform({ ...transform, scale: v })}
             />
+            <h3>Material</h3>
+			<FloatDisplay
+				name="Transparency"
+				value={material.transparency}
+				setValue={(v) => setMaterial({...material, transparency: v})}
+			/>
+			<FloatDisplay
+				name="Refractive Index"
+				value={material.refractiveIndex}
+				setValue={(v) => setMaterial({...material, refractiveIndex: v})}
+			/>
         </div>
     );
 }

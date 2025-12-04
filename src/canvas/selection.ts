@@ -49,16 +49,11 @@ export default class SelectionLayer {
         }
 
         // Select the most-recently-placed object that we are currently hovering over
-        console.log(this.shapes);
         let selectionIndex = -1;
         for (let i = this.shapes.length - 1; i >= 0; i--) {
             const worldPoint = this.camera.screenToWorld(screenPoint);
-            console.log("worldPoint: ", worldPoint);
 
-            const obj = toObjectTransform(this.shapes[i].transform);
-            console.log("obj: ", obj);
             if (this.shapes[i].hitTest(worldPoint)) {
-                console.log("Selected a shape");
                 selectionIndex = i;
             }
         }

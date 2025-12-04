@@ -12,14 +12,12 @@ import {
     vec_magnitude,
     mat3_mul_mat,
     mat3_identity,
-    mat3_inverse,
-    mat3_chain,
 } from "../math.js";
 import { Shape, type Intersection, Quad, Circle } from "../shapes.js";
+import type { Material } from "../shared/material.js";
 import {
     type Transform,
     apply,
-    interp,
     inverse,
     fromObjectTransform,
     toObjectTransform,
@@ -658,6 +656,13 @@ export class RaymondCanvas extends Canvas {
         const shape = this.selectionLayer.getSelectedShape();
         if (shape) {
             shape.transform = transform;
+        }
+    }
+
+    setSelectedShapeMaterial(material: Material) {
+        const shape = this.selectionLayer.getSelectedShape();
+        if (shape) {
+            shape.material = material;
         }
     }
 }

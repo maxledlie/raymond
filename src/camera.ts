@@ -146,7 +146,6 @@ export default class Camera {
      */
     pan(delta: Vec3) {
         const deltaWorld = this.screenToWorld(vec_mul(delta, -1));
-        console.log("deltaWorld: ", deltaWorld);
         const setup = this.getSetup();
         this.setSetup({ ...setup, center: vec_add(setup.center, deltaWorld) });
     }
