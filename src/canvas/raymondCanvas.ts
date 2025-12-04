@@ -3,17 +3,14 @@ import {
     type Vec3,
     vec_add,
     vec_sub,
-    vec_mul,
-    vec_normalize,
     newPoint,
     newVector,
     vec_div,
-    vec_dot,
     vec_magnitude,
     mat3_mul_mat,
     mat3_identity,
 } from "../math.js";
-import { Shape, type Intersection, Quad, Circle } from "../shapes.js";
+import { Shape, Quad, Circle } from "../shapes.js";
 import type { Material } from "../shared/material.js";
 import {
     type Transform,
@@ -22,8 +19,9 @@ import {
     fromObjectTransform,
     toObjectTransform,
 } from "../transform.js";
-import type { Ray, Laser } from "../types.js";
+import type { Laser } from "../types.js";
 import { Canvas } from "./canvas.js";
+import { computeSegments } from "./optics.js";
 import SelectionLayer from "./selection.js";
 
 type ToolType = "laser" | "quad" | "circle" | "pan" | "select";
@@ -43,11 +41,6 @@ const tools: Tool[] = [
     { type: "pan", name: "Pan", hotkey: "p" },
     { type: "select", name: "Select", hotkey: "s" },
 ];
-
-interface RaySegment {
-    start: Vec3;
-    end: Vec3;
-}
 
 interface Animation {
     from: CameraSetup;
@@ -307,45 +300,12 @@ export class RaymondCanvas extends Canvas {
         this.selectionLayer.draw(this.ctx);
 
         // Work out the segments to actually draw
-        const segments: RaySegment[] = [];
-        for (const laser of lasers) {
-            const fullDir = vec_sub(
-                apply(laser.transform, newPoint(1, 0)),
-                apply(laser.transform, newPoint(0, 0))
-            );
-            let ray = {
-                start: apply(laser.transform, newPoint(0, 0)),
-                direction: vec_normalize(fullDir),
-            };
-            for (let iReflect = 0; iReflect < 100; iReflect++) {
-                const intersections = shapes.flatMap((shape) =>
-                    shape.intersect(ray).map((t) => ({ t, shape }))
-                );
-                const hit = this.findHit(intersections);
-                if (!hit) {
-                    // No intersection: Find end point of line very far along the direction from mouse start to mouse end
-                    segments.push({
-                        start: ray.start,
-                        end: this.pointOnRay(ray, 10000),
-                    });
-                    break;
-                }
-                const hitPoint = this.pointOnRay(ray, hit.t);
-                const normalv = hit.shape.normalAt(hitPoint);
-                const reflectv = this.reflect(ray.direction, normalv);
-                const overPoint = vec_add(hitPoint, vec_mul(normalv, 0.001));
-                segments.push({ start: ray.start, end: hitPoint });
-                ray = {
-                    start: overPoint,
-                    direction: reflectv,
-                };
-            }
-        }
+        const segments = computeSegments(lasers, shapes);
 
-        ctx.strokeStyle = "yellow";
-        ctx.lineWidth = 1.5; // For some reason, a lineWidth of 1 or smaller causes the line to sometimes disappear.
-        for (const segment of segments) {
-            this.drawLine(segment.start, segment.end);
+        ctx.lineWidth = 1.5;
+        for (const { start, end, color } of segments) {
+            ctx.strokeStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
+            this.drawLine(start, end);
         }
 
         state.lastMousePos = mouseScreen;
@@ -368,22 +328,6 @@ export class RaymondCanvas extends Canvas {
         } else {
             return `rgb(${r} ${g} ${b} / ${(a * 100) / 255}%)`;
         }
-    }
-
-    pointOnRay(ray: Ray, t: number): Vec3 {
-        return vec_add(ray.start, vec_mul(ray.direction, t));
-    }
-
-    /** The "hit" is the intersection with smallest non-negative t-value
-     *  TODO: Keep intersection list sorted while inserting to optimise.
-     **/
-    findHit(intersections: Intersection[]): Intersection | null {
-        const sorted = intersections.sort((a, b) => a.t - b.t);
-        return sorted.find((x) => x.t >= 0) ?? null;
-    }
-
-    reflect(inVec: Vec3, normal: Vec3) {
-        return vec_sub(inVec, vec_mul(normal, 2 * vec_dot(inVec, normal)));
     }
 
     drawShape(shape: Shape, hovered: boolean) {

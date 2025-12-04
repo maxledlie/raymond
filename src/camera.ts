@@ -14,7 +14,6 @@ import {
     fromObjectTransform,
     scaling,
     translation,
-    translateObject,
 } from "./transform.js";
 
 /* Describes the position, size and orientation of the viewport in world space */
