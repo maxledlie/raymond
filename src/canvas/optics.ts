@@ -10,7 +10,7 @@ import {
     vec_sub,
     type Vec3,
 } from "../math";
-import type { Intersection, Shape } from "../shapes";
+import { Shape, type Intersection } from "../shapes";
 import type { Color } from "../shared/color";
 import { apply } from "../transform";
 import type { Laser, Ray } from "../types";
@@ -19,6 +19,20 @@ export interface RaySegment {
     start: Vec3;
     end: Vec3;
     color: Color;
+}
+
+interface IntersectionData {
+    t: number;
+    shape: Shape;
+    inside: boolean;
+    point: Vec3;
+    normalv: Vec3;
+    eyev: Vec3;
+    overPoint: Vec3;
+    underPoint: Vec3;
+    reflectv: Vec3;
+    n1: number;
+    n2: number;
 }
 
 /**
@@ -43,15 +57,18 @@ export interface RaySegment {
 function _computeSegments(
     laser: Laser,
     shapes: Shape[],
-    maxDepth: number = 100
+    maxDepth: number = 10
 ): RaySegment[] {
     const segments: RaySegment[] = [];
 
     function castRay(ray: Ray, depth: number) {
-        const intersections = shapes.flatMap((shape) =>
-            shape.intersect(ray).map((t) => ({ t, shape }))
-        );
-        const hit = findHit(intersections);
+        const intersections = shapes
+            .flatMap((shape) => shape.intersect(ray).map((t) => ({ t, shape })))
+            .sort((x) => x.t);
+
+        // The "hit" is the first intersection in front of the ray source.
+        const hit = intersections.find((x) => x.t >= 0);
+
         if (!hit) {
             // No intersection: Find end point of line very far along the direction from mouse start to mouse end
             segments.push({
@@ -61,21 +78,45 @@ function _computeSegments(
             });
             return;
         }
+
+        // Add this segment to the global array
         const hitPoint = pointOnRay(ray, hit.t);
-        const normalv = hit.shape.normalAt(hitPoint);
-        const reflectv = reflect(ray.direction, normalv);
-        const overPoint = vec_add(hitPoint, vec_mul(normalv, 0.001));
         segments.push({
             start: ray.start,
             end: hitPoint,
             color: { r: 255, g: 255, b: 0 },
         });
-        ray = {
+
+        const { n1, n2, eyev, normalv, underPoint, overPoint, reflectv } =
+            computeIntersectionData(hit, ray, intersections);
+
+        // Refractions
+        const nRatio = n1 / n2;
+        const cos_i = vec_dot(eyev, normalv);
+        const sin2_t = nRatio * nRatio * (1 - cos_i * cos_i);
+        if (sin2_t > 1) {
+            // Total internal reflection
+            return;
+        }
+
+        const cos_t = Math.sqrt(1 - sin2_t);
+        const refractv = vec_sub(
+            vec_mul(normalv, nRatio * cos_i - cos_t),
+            vec_mul(eyev, nRatio)
+        );
+
+        const refractedRay = {
+            start: underPoint,
+            direction: refractv,
+        };
+
+        const reflectedRay = {
             start: overPoint,
             direction: reflectv,
         };
         if (depth < maxDepth) {
-            castRay(ray, depth + 1);
+            castRay(refractedRay, depth + 1);
+            castRay(reflectedRay, depth + 1);
         }
     }
 
@@ -92,19 +133,65 @@ function _computeSegments(
     return segments;
 }
 
+function computeIntersectionData(
+    hit: Intersection,
+    ray: Ray,
+    intersections: Intersection[]
+): IntersectionData {
+    const point = pointOnRay(ray, hit.t);
+    let normalv = hit.shape.normalAt(point);
+    const eyev = vec_mul(ray.direction, -1);
+    const inside = vec_dot(eyev, normalv) < 0;
+
+    if (inside) {
+        normalv = vec_mul(normalv, -1);
+    }
+
+    const nudge = vec_mul(normalv, 0.001);
+    const overPoint = vec_add(point, nudge);
+    const underPoint = vec_sub(point, nudge);
+
+    const reflectv = reflect(ray.direction, normalv);
+
+    // Determine the refractive indexes of the two materials the ray is transitioning between.
+    let n1 = 1.0;
+    let n2 = 1.0;
+    let containers: Shape[] = [];
+    for (const x of intersections) {
+        if (x === hit && containers.length > 0) {
+            n1 = containers[containers.length - 1].material.refractiveIndex;
+        }
+
+        if (containers.includes(x.shape)) {
+            containers = containers.filter((s) => s !== x.shape);
+        } else {
+            containers.push(x.shape);
+        }
+
+        if (x === hit && containers.length > 0) {
+            n2 = containers[containers.length - 1].material.refractiveIndex;
+        }
+    }
+
+    return {
+        ...hit,
+        point,
+        eyev,
+        normalv,
+        inside,
+        overPoint,
+        underPoint,
+        reflectv,
+		n1,
+		n2
+    };
+}
+
 export function computeSegments(
     lasers: Laser[],
     shapes: Shape[]
 ): RaySegment[] {
     return lasers.flatMap((laser) => _computeSegments(laser, shapes));
-}
-
-/** The "hit" is the intersection with smallest non-negative t-value
- *  TODO: Keep intersection list sorted while inserting to optimise.
- **/
-function findHit(intersections: Intersection[]): Intersection | null {
-    const sorted = intersections.sort((a, b) => a.t - b.t);
-    return sorted.find((x) => x.t >= 0) ?? null;
 }
 
 function reflect(inVec: Vec3, normal: Vec3) {
