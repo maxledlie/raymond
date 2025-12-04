@@ -40,17 +40,14 @@ export interface RaySegment {
  * @param shapes
  * @returns
  */
-function _computeSegments(laser: Laser, shapes: Shape[]): RaySegment[] {
+function _computeSegments(
+    laser: Laser,
+    shapes: Shape[],
+    maxDepth: number = 100
+): RaySegment[] {
     const segments: RaySegment[] = [];
-    const fullDir = vec_sub(
-        apply(laser.transform, newPoint(1, 0)),
-        apply(laser.transform, newPoint(0, 0))
-    );
-    let ray = {
-        start: apply(laser.transform, newPoint(0, 0)),
-        direction: vec_normalize(fullDir),
-    };
-    for (let iReflect = 0; iReflect < 100; iReflect++) {
+
+    function castRay(ray: Ray, depth: number) {
         const intersections = shapes.flatMap((shape) =>
             shape.intersect(ray).map((t) => ({ t, shape }))
         );
@@ -62,7 +59,7 @@ function _computeSegments(laser: Laser, shapes: Shape[]): RaySegment[] {
                 end: pointOnRay(ray, 10000),
                 color: { r: 255, g: 255, b: 0 },
             });
-            break;
+            return;
         }
         const hitPoint = pointOnRay(ray, hit.t);
         const normalv = hit.shape.normalAt(hitPoint);
@@ -77,7 +74,21 @@ function _computeSegments(laser: Laser, shapes: Shape[]): RaySegment[] {
             start: overPoint,
             direction: reflectv,
         };
+        if (depth < maxDepth) {
+            castRay(ray, depth + 1);
+        }
     }
+
+    const fullDir = vec_sub(
+        apply(laser.transform, newPoint(1, 0)),
+        apply(laser.transform, newPoint(0, 0))
+    );
+    let ray = {
+        start: apply(laser.transform, newPoint(0, 0)),
+        direction: vec_normalize(fullDir),
+    };
+    castRay(ray, 0);
+
     return segments;
 }
 
