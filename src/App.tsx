@@ -121,6 +121,10 @@ function App() {
                                     deserializeTransform(t)
                                 );
                             }}
+                            material={selectedObject.material}
+                            setMaterial={(m) =>
+                                canvas?.setSelectedShapeMaterial(m)
+                            }
                         />
                     )}
                 </div>

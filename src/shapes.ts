@@ -9,6 +9,7 @@ import {
     vec_normalize,
     vec_sub,
 } from "./math.js";
+import { defaultMaterial, type Material } from "./shared/material.js";
 import { type Transform, apply, inverse } from "./transform.js";
 import type { Ray } from "./types.js";
 
@@ -23,9 +24,11 @@ export type ShapeType = "quad" | "circle";
 
 export abstract class Shape {
     transform: Transform;
+    material: Material;
 
-    constructor(transform: Transform) {
+    constructor(transform: Transform, material?: Material) {
         this.transform = transform;
+        this.material = material ?? defaultMaterial();
     }
 
     abstract type(): string;
