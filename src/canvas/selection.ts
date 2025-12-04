@@ -11,7 +11,6 @@ import {
 import type { Shape } from "../shapes";
 import {
     apply,
-    toObjectTransform,
     transformObject,
     translateObject,
 } from "../transform";
