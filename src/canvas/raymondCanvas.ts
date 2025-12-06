@@ -268,9 +268,9 @@ export class RaymondCanvas extends Canvas {
         }
 
         // Draw coordinate grid
-        // const minorColor = "rgb(100 100 100 / 30%)";
-        // const majorColor = "rgb(255 255 255)";
-        // this.drawCoordinates(mat3_identity(), majorColor, minorColor, 100);
+        const minorColor = "rgb(100 100 100 / 30%)";
+        const majorColor = "rgb(255 255 255)";
+        this.drawCoordinates(mat3_identity(), majorColor, minorColor, 100);
 
         // Draw preview entities
         let previewLaser = this.computePreviewLaser();
