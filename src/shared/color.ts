@@ -13,7 +13,7 @@ export function color_add(a: Color, b: Color) {
 }
 
 export function color_html(color: Color, alpha: number): string {
-    return `rgba(${color.r * 255}, ${color.g * 255}, ${color.b * 255}, ${
-        alpha
-    })`;
+    return `rgba(${color.r * 255}, ${color.g * 255}, ${
+        color.b * 255
+    }, ${alpha})`;
 }

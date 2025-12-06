@@ -22,7 +22,7 @@ import {
 } from "../transform.js";
 import type { Laser } from "../types.js";
 import { Canvas } from "./canvas.js";
-import { computeSegments } from "./optics.js";
+import { computeSegments, toggleSchlick } from "./optics.js";
 import SelectionLayer from "./selection.js";
 
 type ToolType = "laser" | "quad" | "circle" | "pan" | "select";
@@ -98,6 +98,9 @@ export class RaymondCanvas extends Canvas {
         const { state } = this;
         if (e.key.toUpperCase() === "D") {
             state.debug = !state.debug;
+        }
+        if (e.key.toUpperCase() === "P") {
+            toggleSchlick();
         }
         if (
             e.key === "Delete" &&

@@ -23,6 +23,7 @@ export interface RaySegment {
 }
 
 const BLACK: Color = { r: 0, g: 0, b: 0 };
+let SCHLICK_ENABLED = true;
 
 interface IntersectionData {
     t: number;
@@ -112,7 +113,26 @@ function castRay(
         refracted[0]?.color ?? BLACK,
         data.shape.material.transparency
     );
-    const color = color_add(surface, color_add(refractedColor, reflectedColor));
+
+    let color;
+    const material = data.shape.material;
+    if (
+        SCHLICK_ENABLED &&
+        material.reflectivity > 0 &&
+        material.transparency > 0
+    ) {
+        const reflectance = schlick(data);
+        color = color_add(
+            surface,
+            color_add(
+                color_mul(reflectedColor, reflectance),
+                color_mul(refractedColor, 1 - reflectance)
+            )
+        );
+    } else {
+        color = color_add(surface, color_add(refractedColor, reflectedColor));
+    }
+
     const firstSegment: RaySegment = {
         start: ray.start,
         end: hitPoint,
@@ -182,6 +202,32 @@ function castRefractedRay(
         remaining - 1,
         attenuation * data.shape.material.transparency
     );
+}
+
+export function toggleSchlick() {
+    SCHLICK_ENABLED = !SCHLICK_ENABLED;
+}
+
+/* Uses the Schlick reflectance model to return the fraction of light that should be reflected
+on interface with a transparent materisl */
+function schlick(data: IntersectionData) {
+    // Find the cosine of the angle between the eye and normal vectors
+    let cos = vec_dot(data.eyev, data.normalv);
+
+    // Total internal reflection can only occur if n1 > n2
+    if (data.n1 > data.n2) {
+        const n = data.n1 / data.n2;
+        const sin2_t = n * n * (1 - cos * cos);
+        if (sin2_t > 1) {
+            // Total internal reflection
+            return 1;
+        }
+
+        cos = Math.sqrt(1 - sin2_t);
+    }
+
+    const r0 = Math.pow((data.n1 - data.n2) / (data.n1 + data.n2), 2);
+    return r0 + (1 - r0) * Math.pow(1 - cos, 5);
 }
 
 function computeIntersectionData(
