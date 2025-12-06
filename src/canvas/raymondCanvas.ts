@@ -20,12 +20,12 @@ import {
     fromObjectTransform,
     toObjectTransform,
 } from "../transform.js";
-import type { Laser } from "../types.js";
+import type { Eye as Eye } from "../types.js";
 import { Canvas } from "./canvas.js";
 import { computeSegments, toggleSchlick } from "./optics.js";
 import SelectionLayer from "./selection.js";
 
-type ToolType = "laser" | "quad" | "circle" | "pan" | "select";
+type ToolType = "eye" | "quad" | "circle" | "pan" | "select" | "light";
 
 const FRAME_RATE = 60;
 
@@ -36,11 +36,12 @@ interface Tool {
 }
 
 const tools: Tool[] = [
-    { type: "laser", name: "Laser", hotkey: "l" },
+    { type: "eye", name: "Eye", hotkey: "e" },
     { type: "circle", name: "Circle", hotkey: "c" },
     { type: "quad", name: "Quad", hotkey: "q" },
     { type: "pan", name: "Pan", hotkey: "p" },
     { type: "select", name: "Select", hotkey: "s" },
+    { type: "light", name: "Light", hotkey: "l" },
 ];
 
 interface Animation {
@@ -59,7 +60,7 @@ interface State {
     isMouseDown: boolean;
     placementStartWorld: Vec3 | null;
     panStart: Vec3 | null;
-    lasers: Laser[];
+    eyes: Eye[];
     cameraPath: Animation | null;
 }
 
@@ -70,8 +71,8 @@ function defaultState(): State {
         isMouseDown: false,
         placementStartWorld: null,
         panStart: null,
-        tool: "laser",
-        lasers: [],
+        tool: "eye",
+        eyes: [],
         shapes: [],
         camera: new Camera(1, 1), // We don't know the screen width and height yet.
         cameraPath: null,
@@ -149,10 +150,10 @@ export class RaymondCanvas extends Canvas {
         state.isMouseDown = false;
         this.selectionLayer.mouseUp();
         if (e.button === 0) {
-            if (state.tool === "laser") {
-                const previewLaser = this.computePreviewLaser();
-                if (previewLaser) {
-                    state.lasers.push(previewLaser);
+            if (state.tool === "eye") {
+                const previewEye = this.computePreviewEye();
+                if (previewEye) {
+                    state.eyes.push(previewEye);
                 }
             } else {
                 const previewShape = this.computePreviewShape();
@@ -276,22 +277,22 @@ export class RaymondCanvas extends Canvas {
         this.drawCoordinates(mat3_identity(), majorColor, minorColor, 100);
 
         // Draw preview entities
-        let previewLaser = this.computePreviewLaser();
+        let previewEye = this.computePreviewEye();
         let previewShape = this.computePreviewShape();
 
-        const lasers = [...state.lasers];
-        if (previewLaser) {
-            lasers.push(previewLaser);
+        const eyes = [...state.eyes];
+        if (previewEye) {
+            eyes.push(previewEye);
         }
         const shapes: Shape[] = [...state.shapes];
         if (previewShape) {
             shapes.push(previewShape);
         }
 
-        // Draw lasers including preview laser
-        for (const laser of lasers) {
-            const hovered = this.hitTestLaser(laser, mouseScreen);
-            this.drawLaser(ctx, laser, hovered);
+        // Draw eyes including preview eye
+        for (const eye of eyes) {
+            const hovered = this.hitTestEye(eye, mouseScreen);
+            this.drawEye(ctx, eye, hovered);
         }
 
         // Draw shapes including preview shape
@@ -304,7 +305,7 @@ export class RaymondCanvas extends Canvas {
         this.selectionLayer.draw(this.ctx);
 
         // Work out the segments to actually draw
-        const segments = computeSegments(lasers, shapes);
+        const segments = computeSegments(eyes, shapes);
 
         ctx.lineWidth = 2;
         for (const { start, end, color, attenuation } of segments) {
@@ -389,7 +390,7 @@ export class RaymondCanvas extends Canvas {
         ctx.setTransform(oldTransform);
     }
 
-    drawLaser(ctx: CanvasRenderingContext2D, laser: Laser, hovered: boolean) {
+    drawEye(ctx: CanvasRenderingContext2D, eye: Eye, hovered: boolean) {
         const { state } = this;
 
         // Drawing the apparatus as a polygon is probably suboptimal.
@@ -400,14 +401,14 @@ export class RaymondCanvas extends Canvas {
         const bottomLeft = newPoint(-0.4, 0.1);
 
         if (hovered && state.debug) {
-            // Draw local coordinate system of laser
+            // Draw local coordinate system of eye
             const minorColor = this.color(0, 100, 0, 100);
             const majorColor = this.color(0, 255, 0, 255);
-            this.drawCoordinates(laser.transform, majorColor, minorColor, 2);
+            this.drawCoordinates(eye.transform, majorColor, minorColor, 2);
         }
 
         const points = [topLeft, topRight, bottomRight, bottomLeft].map((p) => {
-            const world = apply(laser.transform, p);
+            const world = apply(eye.transform, p);
             return state.camera.worldToScreen(world);
         });
 
@@ -492,12 +493,12 @@ export class RaymondCanvas extends Canvas {
         return shape.hitTest(worldPoint);
     }
 
-    hitTestLaser(laser: Laser, screenPoint: Vec3) {
+    hitTestEye(eye: Eye, screenPoint: Vec3) {
         const { state } = this;
 
         // Transform point from screen to world to local space
         const world = state.camera.screenToWorld(screenPoint);
-        const local = apply(inverse(laser.transform), world);
+        const local = apply(inverse(eye.transform), world);
 
         // The drawn rectangle is at local coords x in [-40, 0], y in [-10, 10]
         if (
@@ -591,9 +592,9 @@ export class RaymondCanvas extends Canvas {
         return new Circle(transform);
     }
 
-    computePreviewLaser(): Laser | null {
+    computePreviewEye(): Eye | null {
         const { state } = this;
-        if (state.placementStartWorld == null || state.tool !== "laser") {
+        if (state.placementStartWorld == null || state.tool !== "eye") {
             return null;
         }
         const end = state.camera.screenToWorld(
@@ -610,7 +611,7 @@ export class RaymondCanvas extends Canvas {
             ),
         });
         return {
-            type: "laser",
+            type: "eye",
             transform,
         };
     }

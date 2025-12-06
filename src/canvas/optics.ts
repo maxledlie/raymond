@@ -13,7 +13,7 @@ import {
 import { Shape, type Intersection } from "../shapes";
 import { color_add, color_mul, type Color } from "../shared/color";
 import { apply } from "../transform";
-import type { Laser, Ray } from "../types";
+import type { Eye, Ray } from "../types";
 
 export interface RaySegment {
     start: Vec3;
@@ -59,7 +59,7 @@ interface IntersectionData {
  * @returns
  */
 function _computeSegments(
-    laser: Laser,
+    laser: Eye,
     shapes: Shape[],
     maxDepth: number = 10
 ): RaySegment[] {
@@ -284,10 +284,7 @@ function computeIntersectionData(
     };
 }
 
-export function computeSegments(
-    lasers: Laser[],
-    shapes: Shape[]
-): RaySegment[] {
+export function computeSegments(lasers: Eye[], shapes: Shape[]): RaySegment[] {
     return lasers.flatMap((laser) => _computeSegments(laser, shapes));
 }
 

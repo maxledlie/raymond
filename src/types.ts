@@ -10,7 +10,7 @@ export interface RaymondState {
     placementStartWorld: Vec3 | null;
     panStart: Vec3 | null;
     tool: ToolType;
-    lasers: Laser[];
+    eyes: Eye[];
     shapes: Shape[];
     /** Which shape is currently selected, if any? */
     selectedShapeIndex: number | null;
@@ -27,12 +27,12 @@ export interface Ray {
     direction: Vec3;
 }
 
-export interface Laser {
-    type: "laser";
-    transform: Transform; // Maps a point from the laser's local space to world space
+export interface Eye {
+    type: "eye";
+    transform: Transform; // Maps a point from the eye's local space to world space
 }
 
-export type ToolType = "laser" | "quad" | "circle" | "pan" | "select";
+export type ToolType = "eye" | "quad" | "circle" | "pan" | "select";
 
 export interface Tool {
     type: ToolType;
