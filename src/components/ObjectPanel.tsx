@@ -1,18 +1,19 @@
 import "../App.css";
 import type { Material } from "../shared/material";
 import type { Transform, Vec2 } from "../uiTypes";
+import ColorPicker from "./ColorPicker";
 
 export interface ObjectPanelProps {
     transform: Transform;
     setTransform: (transform: Transform) => void;
-	material: Material;
-	setMaterial: (material: Material) => void;
+    material: Material;
+    setMaterial: (material: Material) => void;
 }
 export default function ObjectPanel({
     transform,
     setTransform,
-	material,
-	setMaterial
+    material,
+    setMaterial,
 }: ObjectPanelProps) {
     return (
         <div>
@@ -35,16 +36,36 @@ export default function ObjectPanel({
                 setVector={(v) => setTransform({ ...transform, scale: v })}
             />
             <h3>Material</h3>
-			<FloatDisplay
-				name="Transparency"
-				value={material.transparency}
-				setValue={(v) => setMaterial({...material, transparency: v})}
-			/>
-			<FloatDisplay
-				name="Refractive Index"
-				value={material.refractiveIndex}
-				setValue={(v) => setMaterial({...material, refractiveIndex: v})}
-			/>
+            <ColorPicker
+                color={material.color}
+                setColor={(c) => setMaterial({ ...material, color: c })}
+            />
+            <FloatDisplay
+                name="Reflectivity"
+                min={0}
+                max={1}
+                step={0.05}
+                value={material.reflectivity}
+                setValue={(v) => setMaterial({ ...material, reflectivity: v })}
+            />
+            <FloatDisplay
+                name="Transparency"
+                min={0}
+                max={1}
+                step={0.05}
+                value={material.transparency}
+                setValue={(v) => setMaterial({ ...material, transparency: v })}
+            />
+            <FloatDisplay
+                name="Refractive Index"
+                min={0.1}
+                max={2.5}
+                step={0.1}
+                value={material.refractiveIndex}
+                setValue={(v) =>
+                    setMaterial({ ...material, refractiveIndex: v })
+                }
+            />
         </div>
     );
 }
@@ -53,9 +74,18 @@ interface FloatDisplayProps {
     name: string;
     value: number;
     setValue: (v: number) => void;
+    min?: number;
+    max?: number;
     step?: number;
 }
-function FloatDisplay({ name, value, setValue, step }: FloatDisplayProps) {
+function FloatDisplay({
+    name,
+    value,
+    setValue,
+    min,
+    max,
+    step,
+}: FloatDisplayProps) {
     return (
         <div style={{ margin: "6px" }}>
             <div className="form-field">
@@ -65,6 +95,8 @@ function FloatDisplay({ name, value, setValue, step }: FloatDisplayProps) {
                         type="number"
                         name={`${name} x`}
                         value={truncateFloat(value, 2)}
+                        min={min}
+                        max={max}
                         step={step ?? 0.01}
                         onChange={(e) => setValue(parseFloat(e.target.value))}
                     ></input>

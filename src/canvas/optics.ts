@@ -11,7 +11,7 @@ import {
     type Vec3,
 } from "../math";
 import { Shape, type Intersection } from "../shapes";
-import type { Color } from "../shared/color";
+import { color_add, color_mul, type Color } from "../shared/color";
 import { apply } from "../transform";
 import type { Laser, Ray } from "../types";
 
@@ -19,7 +19,10 @@ export interface RaySegment {
     start: Vec3;
     end: Vec3;
     color: Color;
+    attenuation: number;
 }
+
+const BLACK: Color = { r: 0, g: 0, b: 0 };
 
 interface IntersectionData {
     t: number;
@@ -59,67 +62,7 @@ function _computeSegments(
     shapes: Shape[],
     maxDepth: number = 10
 ): RaySegment[] {
-    const segments: RaySegment[] = [];
-
-    function castRay(ray: Ray, depth: number) {
-        const intersections = shapes
-            .flatMap((shape) => shape.intersect(ray).map((t) => ({ t, shape })))
-            .sort((x) => x.t);
-
-        // The "hit" is the first intersection in front of the ray source.
-        const hit = intersections.find((x) => x.t >= 0);
-
-        if (!hit) {
-            // No intersection: Find end point of line very far along the direction from mouse start to mouse end
-            segments.push({
-                start: ray.start,
-                end: pointOnRay(ray, 10000),
-                color: { r: 255, g: 255, b: 0 },
-            });
-            return;
-        }
-
-        // Add this segment to the global array
-        const hitPoint = pointOnRay(ray, hit.t);
-        segments.push({
-            start: ray.start,
-            end: hitPoint,
-            color: { r: 255, g: 255, b: 0 },
-        });
-
-        const { n1, n2, eyev, normalv, underPoint, overPoint, reflectv } =
-            computeIntersectionData(hit, ray, intersections);
-
-        // Refractions
-        const nRatio = n1 / n2;
-        const cos_i = vec_dot(eyev, normalv);
-        const sin2_t = nRatio * nRatio * (1 - cos_i * cos_i);
-        if (sin2_t > 1) {
-            // Total internal reflection
-            return;
-        }
-
-        const cos_t = Math.sqrt(1 - sin2_t);
-        const refractv = vec_sub(
-            vec_mul(normalv, nRatio * cos_i - cos_t),
-            vec_mul(eyev, nRatio)
-        );
-
-        const refractedRay = {
-            start: underPoint,
-            direction: refractv,
-        };
-
-        const reflectedRay = {
-            start: overPoint,
-            direction: reflectv,
-        };
-        if (depth < maxDepth) {
-            castRay(refractedRay, depth + 1);
-            castRay(reflectedRay, depth + 1);
-        }
-    }
-
+    console.log(shapes);
     const fullDir = vec_sub(
         apply(laser.transform, newPoint(1, 0)),
         apply(laser.transform, newPoint(0, 0))
@@ -128,9 +71,117 @@ function _computeSegments(
         start: apply(laser.transform, newPoint(0, 0)),
         direction: vec_normalize(fullDir),
     };
-    castRay(ray, 0);
+    return castRay(shapes, ray, maxDepth, 1);
+}
 
-    return segments;
+function castRay(
+    shapes: Shape[],
+    ray: Ray,
+    remaining: number,
+    attenuation: number
+): RaySegment[] {
+    const intersections = shapes.flatMap((shape) =>
+        shape.intersect(ray).map((t) => ({ t, shape }))
+    );
+
+    intersections.sort((a, b) => a.t - b.t);
+
+    console.log(intersections);
+
+    // The "hit" is the first intersection in front of the ray source.
+    // If no hit, then there are no more segments along this path.
+    const hit = intersections.find((x) => x.t >= 0);
+    if (!hit) {
+        return [];
+    }
+
+    const hitPoint = pointOnRay(ray, hit.t);
+
+    const data = computeIntersectionData(hit, ray, intersections);
+
+    // Shade hit
+    const surface = data.shape.material.color; // TODO: Phong reflection model
+    const reflected = castReflectedRay(shapes, data, remaining, attenuation);
+    const refracted = castRefractedRay(shapes, data, remaining, attenuation);
+
+    const reflectedColor = color_mul(
+        reflected[0]?.color ?? BLACK,
+        data.shape.material.reflectivity
+    );
+    const refractedColor = color_mul(
+        refracted[0]?.color ?? BLACK,
+        data.shape.material.transparency
+    );
+    const color = color_add(surface, color_add(refractedColor, reflectedColor));
+    const firstSegment: RaySegment = {
+        start: ray.start,
+        end: hitPoint,
+        color,
+        attenuation,
+    };
+    return [firstSegment, ...reflected, ...refracted];
+}
+
+function castReflectedRay(
+    shapes: Shape[],
+    data: IntersectionData,
+    remaining: number,
+    attenuation: number
+): RaySegment[] {
+    if (remaining === 0 || data.shape.material.reflectivity === 0) {
+        return [];
+    }
+
+    const ray: Ray = {
+        start: data.overPoint,
+        direction: data.reflectv,
+    };
+    return castRay(
+        shapes,
+        ray,
+        remaining - 1,
+        attenuation * data.shape.material.reflectivity
+    );
+}
+
+function castRefractedRay(
+    shapes: Shape[],
+    data: IntersectionData,
+    remaining: number,
+    attenuation: number
+): RaySegment[] {
+    if (remaining === 0 || data.shape.material.transparency === 0) {
+        // No refraction
+        return [];
+    }
+    const { n1, n2, eyev, normalv, underPoint } = data;
+
+    // Refractions
+    const nRatio = n1 / n2;
+    const cos_i = vec_dot(eyev, normalv);
+    const sin2_t = nRatio * nRatio * (1 - cos_i * cos_i);
+    if (sin2_t > 1) {
+        // Total internal reflection
+        return [];
+    }
+
+    const cos_t = Math.sqrt(1 - sin2_t);
+    const refractv = vec_sub(
+        vec_mul(normalv, nRatio * cos_i - cos_t),
+        vec_mul(eyev, nRatio)
+    );
+
+    const refractedRay = {
+        start: underPoint,
+        direction: refractv,
+    };
+
+    return castRay(
+        shapes,
+        refractedRay,
+        remaining - 1,
+        attenuation * data.shape.material.transparency
+    );
 }
 
 function computeIntersectionData(
@@ -182,8 +233,8 @@ function computeIntersectionData(
         overPoint,
         underPoint,
         reflectv,
-		n1,
-		n2
+        n1,
+        n2,
     };
 }
 

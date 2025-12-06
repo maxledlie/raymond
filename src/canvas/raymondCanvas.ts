@@ -11,6 +11,7 @@ import {
     mat3_identity,
 } from "../math.js";
 import { Shape, Quad, Circle } from "../shapes.js";
+import { color_add, color_html, color_mul } from "../shared/color.js";
 import type { Material } from "../shared/material.js";
 import {
     type Transform,
@@ -267,9 +268,9 @@ export class RaymondCanvas extends Canvas {
         }
 
         // Draw coordinate grid
-        const minorColor = "rgb(100 100 100 / 30%)";
-        const majorColor = "rgb(255 255 255)";
-        this.drawCoordinates(mat3_identity(), majorColor, minorColor, 100);
+        // const minorColor = "rgb(100 100 100 / 30%)";
+        // const majorColor = "rgb(255 255 255)";
+        // this.drawCoordinates(mat3_identity(), majorColor, minorColor, 100);
 
         // Draw preview entities
         let previewLaser = this.computePreviewLaser();
@@ -302,9 +303,9 @@ export class RaymondCanvas extends Canvas {
         // Work out the segments to actually draw
         const segments = computeSegments(lasers, shapes);
 
-        ctx.lineWidth = 1.5;
-        for (const { start, end, color } of segments) {
-            ctx.strokeStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
+        ctx.lineWidth = 2;
+        for (const { start, end, color, attenuation } of segments) {
+            ctx.strokeStyle = color_html(color, attenuation);
             this.drawLine(start, end);
         }
 
@@ -337,8 +338,6 @@ export class RaymondCanvas extends Canvas {
             const minorColor = this.color(100, 100, 255, 200);
             this.drawCoordinates(shape.transform, majorColor, minorColor, 2);
         }
-
-        ctx.fillStyle = "lightblue";
         const oldTransform = ctx.getTransform();
 
         // Get the combination of object and camera transforms
@@ -351,6 +350,29 @@ export class RaymondCanvas extends Canvas {
             mat[0][2],
             mat[1][2]
         );
+
+        const trueColor = color_html(
+            shape.material.color,
+            1 - shape.material.transparency
+        );
+        if (shape.material.reflectivity > 0) {
+            const gradient = ctx.createLinearGradient(-1, -1, 1, 1);
+            const specularColor = color_html(
+                color_add(
+                    shape.material.color,
+                    color_mul({ r: 1, g: 1, b: 1 }, shape.material.reflectivity)
+                ),
+                1 - shape.material.transparency
+            );
+            gradient.addColorStop(0, trueColor);
+            gradient.addColorStop(0.25, trueColor);
+            gradient.addColorStop(0.5, specularColor);
+            gradient.addColorStop(0.75, trueColor);
+            gradient.addColorStop(1, trueColor);
+            ctx.fillStyle = gradient;
+        } else {
+            ctx.fillStyle = trueColor;
+        }
 
         switch (shape.type()) {
             case "quad":

@@ -59,7 +59,11 @@ export default class SelectionLayer {
         if (selectionIndex >= 0) {
             this.selectedShapeIndex = selectionIndex;
             this.shapeDragged = true;
-        }
+        } else {
+			if (this.activeHandleIndex == null) {
+				this.selectedShapeIndex = null;
+			}
+		}
     }
 
     mouseUp() {
