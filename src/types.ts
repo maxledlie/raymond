@@ -1,7 +1,7 @@
 import type Camera from "./camera";
-import type { Vec3 } from "./math";
+import { newPoint, vec_sub, type Vec3 } from "./math";
 import type { Shape } from "./shapes";
-import { apply, inverse, type Transform } from "./transform";
+import { apply, inverse, transformObject, type Transform } from "./transform";
 
 export interface RaymondState {
     debug: boolean;
@@ -27,13 +27,9 @@ export interface Ray {
     direction: Vec3;
 }
 
-export interface Eye {
-    type: "eye";
-    transform: Transform; // Maps a point from the eye's local space to world space
-}
-
 export class Eye {
     transform: Transform;
+    numRays: number = 1;
 
     constructor(transform: Transform) {
         this.transform = transform;
@@ -46,12 +42,32 @@ export class Eye {
         if (
             local.x >= -0.4 &&
             local.x <= 0 &&
-            local.y >= -0.1 &&
+            local.y >= -0 &&
             local.y <= 0.1
         ) {
             return true;
         }
         return false;
+    }
+
+    // Returns the relative positions in local space of the object's handle
+    handlePositions(): Vec3[] {
+        return [newPoint(0, 1.2)];
+    }
+
+    // TODO: Would be cleaner for shapes not to know about their handles
+    handleMoved(handleIndex: number, _: Vec3, newPos: Vec3) {
+        if (handleIndex !== 0) {
+            return; // Scaling not implemented yet
+        }
+        // We are rotating the shape. The centre of the shape, top of the shape, and mouse position should be collinear.
+        const shapeCentreWorld = apply(this.transform, newPoint(0, 0));
+        const d = vec_sub(newPos, shapeCentreWorld);
+        const theta = Math.atan2(d.y, d.x);
+        this.transform = transformObject(this.transform, (o) => ({
+            ...o,
+            rotation: theta - Math.PI / 2,
+        }));
     }
 }
 
