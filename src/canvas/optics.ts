@@ -63,7 +63,6 @@ function _computeSegments(
     shapes: Shape[],
     maxDepth: number = 10
 ): RaySegment[] {
-    console.log(shapes);
     const fullDir = vec_sub(
         apply(laser.transform, newPoint(1, 0)),
         apply(laser.transform, newPoint(0, 0))
@@ -86,8 +85,6 @@ function castRay(
     );
 
     intersections.sort((a, b) => a.t - b.t);
-
-    console.log(intersections);
 
     // The "hit" is the first intersection in front of the ray source.
     // If no hit, then there are no more segments along this path.

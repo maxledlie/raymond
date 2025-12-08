@@ -1,7 +1,7 @@
 import type Camera from "./camera";
 import type { Vec3 } from "./math";
 import type { Shape } from "./shapes";
-import { type Transform } from "./transform";
+import { apply, inverse, type Transform } from "./transform";
 
 export interface RaymondState {
     debug: boolean;
@@ -30,6 +30,29 @@ export interface Ray {
 export interface Eye {
     type: "eye";
     transform: Transform; // Maps a point from the eye's local space to world space
+}
+
+export class Eye {
+    transform: Transform;
+
+    constructor(transform: Transform) {
+        this.transform = transform;
+    }
+
+    hitTest(worldPoint: Vec3): boolean {
+        const local = apply(inverse(this.transform), worldPoint);
+
+        // The drawn rectangle is at local coords x in [-40, 0], y in [-10, 10]
+        if (
+            local.x >= -0.4 &&
+            local.x <= 0 &&
+            local.y >= -0.1 &&
+            local.y <= 0.1
+        ) {
+            return true;
+        }
+        return false;
+    }
 }
 
 export type ToolType = "eye" | "quad" | "circle" | "pan" | "select";

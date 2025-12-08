@@ -9,7 +9,7 @@ export const useStore = create<RaymondState>((_) => ({
     isMouseDown: false,
     placementStartWorld: null,
     panStart: null,
-    tool: "laser",
+    tool: "eye",
     eyes: [],
     shapes: [],
     selectedShapeIndex: null,
