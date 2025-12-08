@@ -19,7 +19,7 @@ export class Eye {
         if (
             local.x >= -0.4 &&
             local.x <= 0 &&
-            local.y >= -0 &&
+            local.y >= -0.1 &&
             local.y <= 0.1
         ) {
             return true;

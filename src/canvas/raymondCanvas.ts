@@ -302,6 +302,7 @@ export class RaymondCanvas extends Canvas {
 
         // Work out the segments to actually draw
         const segments = computeSegments(eyes, shapes);
+        console.log(segments);
 
         ctx.lineWidth = 2;
         for (const { start, end, color, attenuation } of segments) {
@@ -412,8 +413,8 @@ export class RaymondCanvas extends Canvas {
         ctx.fillStyle = hovered ? "green" : "white";
         ctx.beginPath();
         ctx.moveTo(points[0].x, points[0].y);
-       for (const p of points.slice(1)) {
-            ctx.lineTo(p.x, p.y);
+        for (const p of points.slice(1)) {
+            ctx.lineTo(p.x,p.y);
         }
         ctx.closePath();
         ctx.fill();

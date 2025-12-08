@@ -3,6 +3,7 @@ of light sources and objects. */
 
 import {
     newPoint,
+    newVector,
     vec_add,
     vec_dot,
     vec_mul,
@@ -12,7 +13,7 @@ import {
 } from "../math";
 import { Shape, type Intersection } from "../shapes";
 import { color_add, color_mul, type Color } from "../shared/color";
-import { apply } from "../transform";
+import { apply, toObjectTransform } from "../transform";
 import type { Ray } from "../types";
 import type { Eye } from "./Eye";
 
@@ -55,24 +56,60 @@ interface IntersectionData {
  * Instead, we do two passes:
  * In pass 1, we generate the tree, moving downwards from the root node.
  * ... More to work out!
- * @param laser
+ * @param eye
  * @param shapes
  * @returns
  */
 function _computeSegments(
-    laser: Eye,
+    eye: Eye,
     shapes: Shape[],
     maxDepth: number = 10
 ): RaySegment[] {
-    const fullDir = vec_sub(
-        apply(laser.transform, newPoint(1, 0)),
-        apply(laser.transform, newPoint(0, 0))
+    // Calculate initial rays
+    const o = toObjectTransform(eye.transform);
+    console.log(o);
+    const eyePos = apply(eye.transform, newPoint(0, 0));
+    const eyeDir = vec_normalize(
+        vec_sub(
+            apply(eye.transform, newPoint(1, 0)),
+            apply(eye.transform, newPoint(0, 0))
+        )
     );
-    let ray = {
-        start: apply(laser.transform, newPoint(0, 0)),
-        direction: vec_normalize(fullDir),
-    };
-    return castRay(shapes, ray, maxDepth, 1);
+    const filmCentre = vec_add(eyePos, eyeDir);
+    const filmParallel = newVector(eyeDir.y, -eyeDir.x);
+    const halfWidth = Math.tan(eye.fov / 2);
+    const pixelStep = (2 * halfWidth) / eye.numRays;
+    const rays: Ray[] = [];
+    for (let i = 0; i < Math.floor(eye.numRays / 2); i++) {
+        const filmPosUpper = vec_sub(
+            filmCentre,
+            vec_mul(filmParallel, i * pixelStep)
+        );
+        const filmPosLower = vec_add(
+            filmCentre,
+            vec_mul(filmParallel, i * pixelStep)
+        );
+        rays.push({
+            start: eyePos,
+            direction: vec_normalize(vec_sub(filmPosUpper, eyePos)),
+        });
+        rays.push({
+            start: eyePos,
+            direction: vec_normalize(vec_sub(filmPosLower, eyePos)),
+        });
+    }
+    if (eye.numRays % 2 == 1) {
+        rays.push({
+            start: eyePos,
+            direction: vec_normalize(vec_sub(filmCentre, eyePos)),
+        });
+    }
+    let allSegments: RaySegment[] = [];
+    for (const ray of rays) {
+        allSegments = allSegments.concat(castRay(shapes, ray, maxDepth, 1));
+    }
+
+    return allSegments;
 }
 
 function castRay(
@@ -81,6 +118,9 @@ function castRay(
     remaining: number,
     attenuation: number
 ): RaySegment[] {
+    console.log(
+        `Casting ray from ${ray.start.x}, ${ray.start.y} in direction ${ray.direction.x}, ${ray.direction.y}`
+    );
     const intersections = shapes.flatMap((shape) =>
         shape.intersect(ray).map((t) => ({ t, shape }))
     );
@@ -114,6 +154,7 @@ function castRay(
 
     let color;
     const material = data.shape.material;
+
     if (
         SCHLICK_ENABLED &&
         material.reflectivity > 0 &&
