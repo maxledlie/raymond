@@ -8,11 +8,11 @@ import {
     vec_sub,
     type Vec3,
 } from "../math";
-import type { Shape } from "../shapes";
 import {
     apply,
     transformObject,
     translateObject,
+    type Transform,
 } from "../transform";
 
 type HandleAction = "scale" | "rotate";
@@ -22,22 +22,38 @@ interface Handle {
     action: HandleAction;
 }
 
+interface Selectable {
+    transform: Transform;
+    hitTest(worldPoint: Vec3): boolean;
+}
+
 export default class SelectionLayer {
-    shapes: Shape[];
+    objects: Selectable[] = [];
     camera: Camera;
-    selectedShapeIndex: number | null = null;
+    selectedObjectIndex: number | null = null;
     activeHandleIndex: number | null = null;
     shapeDragged: boolean = false;
 
-    constructor(shapes: Shape[], camera: Camera) {
-        this.shapes = shapes;
+    constructor(camera: Camera) {
         this.camera = camera;
+    }
+
+    addSelectable(obj: Selectable) {
+        this.objects.push(obj);
+    }
+
+    removeSelectable(obj: Selectable) {
+        const ix = this.objects.findIndex((o) => o === obj);
+        this.objects.splice(ix, 1);
+        if (ix === this.selectedObjectIndex) {
+            this.selectedObjectIndex = null;
+        }
     }
 
     mouseDown(screenPoint: Vec3) {
         // Activate a handle if one is hovered
-        if (this.selectedShapeIndex != null) {
-            const selectedShape = this.shapes[this.selectedShapeIndex];
+        if (this.selectedObjectIndex != null) {
+            const selectedShape = this.objects[this.selectedObjectIndex];
             const { rotation, scale } = this.computeHandles(selectedShape);
             for (const [index, handle] of [rotation, ...scale].entries()) {
                 if (vec_magnitude(vec_sub(handle.position, screenPoint)) < 10) {
@@ -49,21 +65,21 @@ export default class SelectionLayer {
 
         // Select the most-recently-placed object that we are currently hovering over
         let selectionIndex = -1;
-        for (let i = this.shapes.length - 1; i >= 0; i--) {
+        for (let i = this.objects.length - 1; i >= 0; i--) {
             const worldPoint = this.camera.screenToWorld(screenPoint);
 
-            if (this.shapes[i].hitTest(worldPoint)) {
+            if (this.objects[i].hitTest(worldPoint)) {
                 selectionIndex = i;
             }
         }
         if (selectionIndex >= 0) {
-            this.selectedShapeIndex = selectionIndex;
+            this.selectedObjectIndex = selectionIndex;
             this.shapeDragged = true;
         } else {
-			if (this.activeHandleIndex == null) {
-				this.selectedShapeIndex = null;
-			}
-		}
+            if (this.activeHandleIndex == null) {
+                this.selectedObjectIndex = null;
+            }
+        }
     }
 
     mouseUp() {
@@ -73,9 +89,9 @@ export default class SelectionLayer {
 
     mouseMoved(from: Vec3, to: Vec3) {
         // Rotate or scale shape if dragging a handle
-        if (this.selectedShapeIndex != null && this.activeHandleIndex == 0) {
+        if (this.selectedObjectIndex != null && this.activeHandleIndex == 0) {
             // We are rotating the shape. The centre of the shape, top of the shape, and mouse position should be collinear.
-            const shape = this.shapes[this.selectedShapeIndex];
+            const shape = this.objects[this.selectedObjectIndex];
             const shapeCentreWorld = apply(shape.transform, newPoint(0, 0));
             const mouseWorld = this.camera.screenToWorld(to);
             const d = vec_sub(mouseWorld, shapeCentreWorld);
@@ -88,11 +104,11 @@ export default class SelectionLayer {
 
         // Drag selected shape
         if (
-            this.selectedShapeIndex != null &&
-            this.shapes.length > this.selectedShapeIndex &&
+            this.selectedObjectIndex != null &&
+            this.objects.length > this.selectedObjectIndex &&
             this.shapeDragged
         ) {
-            const selectedShape = this.shapes[this.selectedShapeIndex];
+            const selectedShape = this.objects[this.selectedObjectIndex];
 
             const dragEndWorld = this.camera.screenToWorld(to);
             const dragStartWorld = this.camera.screenToWorld(from);
@@ -104,18 +120,14 @@ export default class SelectionLayer {
         }
     }
 
-    getSelectedShape(): Shape | null {
-        return this.shapes[this.selectedShapeIndex ?? -1] ?? null;
-    }
-
-    shapeDeleted() {
-        this.selectedShapeIndex = null;
+    getSelectedObject(): Selectable | null {
+        return this.objects[this.selectedObjectIndex ?? -1] ?? null;
     }
 
     /**
      * Returns the handles that should be drawn around the given shape, assuming it's selected
      */
-    computeHandles(shape: Shape): { rotation: Handle; scale: Handle[] } {
+    computeHandles(object: Selectable): { rotation: Handle; scale: Handle[] } {
         // Handles at each vertex and at the center of each line of the bounding box
         const handlesLocal = [
             newPoint(-1, 1),
@@ -129,14 +141,14 @@ export default class SelectionLayer {
         ];
 
         const scaleHandlesPos = handlesLocal.map((x) =>
-            this.camera.worldToScreen(apply(shape.transform, x))
+            this.camera.worldToScreen(apply(object.transform, x))
         );
 
         const centreScreen = this.camera.worldToScreen(
-            apply(shape.transform, newPoint(0, 0))
+            apply(object.transform, newPoint(0, 0))
         );
         const topScreen = this.camera.worldToScreen(
-            apply(shape.transform, newPoint(0, 1))
+            apply(object.transform, newPoint(0, 1))
         );
         const d = vec_normalize(vec_sub(topScreen, centreScreen));
         const rotationHandlePos = vec_add(topScreen, vec_mul(d, 30));
@@ -153,11 +165,11 @@ export default class SelectionLayer {
     }
 
     draw(ctx: CanvasRenderingContext2D) {
-        if (this.selectedShapeIndex == null) {
+        if (this.selectedObjectIndex == null) {
             return;
         }
 
-        const shape = this.shapes[this.selectedShapeIndex];
+        const shape = this.objects[this.selectedObjectIndex];
         ctx.strokeStyle = "white";
         ctx.lineWidth = 2;
 

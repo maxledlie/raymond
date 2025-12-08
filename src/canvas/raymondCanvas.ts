@@ -16,11 +16,10 @@ import type { Material } from "../shared/material.js";
 import {
     type Transform,
     apply,
-    inverse,
     fromObjectTransform,
     toObjectTransform,
 } from "../transform.js";
-import type { Eye as Eye } from "../types.js";
+import { Eye as Eye } from "../types.js";
 import { Canvas } from "./canvas.js";
 import { computeSegments, toggleSchlick } from "./optics.js";
 import SelectionLayer from "./selection.js";
@@ -81,18 +80,12 @@ function defaultState(): State {
 
 export class RaymondCanvas extends Canvas {
     state: State = defaultState();
-    selectionLayer: SelectionLayer = new SelectionLayer(
-        this.state.shapes,
-        this.state.camera
-    );
+    selectionLayer: SelectionLayer = new SelectionLayer(this.state.camera);
 
     setup() {
         // We have to set these again once things are initialised.
         this.state.camera = new Camera(this.width, this.height);
-        this.selectionLayer = new SelectionLayer(
-            this.state.shapes,
-            this.state.camera
-        );
+        this.selectionLayer = new SelectionLayer(this.state.camera);
     }
 
     keyPressed(e: KeyboardEvent): void {
@@ -105,10 +98,11 @@ export class RaymondCanvas extends Canvas {
         }
         if (
             e.key === "Delete" &&
-            this.selectionLayer.selectedShapeIndex != null
+            this.selectionLayer.selectedObjectIndex != null
         ) {
-            state.shapes.splice(this.selectionLayer.selectedShapeIndex, 1);
-            this.selectionLayer.shapeDeleted();
+            state.shapes.splice(this.selectionLayer.selectedObjectIndex, 1);
+            const selectedObject = this.selectionLayer.getSelectedObject();
+            this.selectionLayer.removeSelectable(selectedObject!);
         }
         for (const tool of tools) {
             if (e.key.toUpperCase() === tool.hotkey.toUpperCase()) {
@@ -154,11 +148,13 @@ export class RaymondCanvas extends Canvas {
                 const previewEye = this.computePreviewEye();
                 if (previewEye) {
                     state.eyes.push(previewEye);
+                    this.selectionLayer.addSelectable(previewEye);
                 }
             } else {
                 const previewShape = this.computePreviewShape();
                 if (previewShape) {
                     state.shapes.push(previewShape);
+                    this.selectionLayer.addSelectable(previewShape);
                 }
             }
             state.placementStartWorld = null;
@@ -179,7 +175,7 @@ export class RaymondCanvas extends Canvas {
 
     doubleClicked() {
         const { state } = this;
-        const shape = this.selectionLayer.getSelectedShape();
+        const shape = this.selectionLayer.getSelectedObject();
 
         if (shape) {
             // Position the camera such that the shape's bounding box appears to be a unit square at the center of the screen
@@ -291,13 +287,13 @@ export class RaymondCanvas extends Canvas {
 
         // Draw eyes including preview eye
         for (const eye of eyes) {
-            const hovered = this.hitTestEye(eye, mouseScreen);
+            const hovered = eye.hitTest(mouseWorld);
             this.drawEye(ctx, eye, hovered);
         }
 
         // Draw shapes including preview shape
         for (const shape of shapes) {
-            const hovered = this.hitTestShape(shape, mouseScreen);
+            const hovered = shape.hitTest(mouseWorld);
             this.drawShape(shape, hovered);
         }
 
@@ -493,25 +489,6 @@ export class RaymondCanvas extends Canvas {
         return shape.hitTest(worldPoint);
     }
 
-    hitTestEye(eye: Eye, screenPoint: Vec3) {
-        const { state } = this;
-
-        // Transform point from screen to world to local space
-        const world = state.camera.screenToWorld(screenPoint);
-        const local = apply(inverse(eye.transform), world);
-
-        // The drawn rectangle is at local coords x in [-40, 0], y in [-10, 10]
-        if (
-            local.x >= -0.4 &&
-            local.x <= 0 &&
-            local.y >= -0.1 &&
-            local.y <= 0.1
-        ) {
-            return true;
-        }
-        return false;
-    }
-
     computePreviewShape(): Shape | null {
         const { state } = this;
         if (!state.placementStartWorld) {
@@ -610,10 +587,7 @@ export class RaymondCanvas extends Canvas {
                 state.placementStartWorld.y
             ),
         });
-        return {
-            type: "eye",
-            transform,
-        };
+        return new Eye(transform);
     }
 
     // Functions for updates via UI
@@ -623,16 +597,16 @@ export class RaymondCanvas extends Canvas {
     }
 
     setSelectedShapeTransform(transform: Transform) {
-        const shape = this.selectionLayer.getSelectedShape();
+        const shape = this.selectionLayer.getSelectedObject();
         if (shape) {
             shape.transform = transform;
         }
     }
 
     setSelectedShapeMaterial(material: Material) {
-        const shape = this.selectionLayer.getSelectedShape();
-        if (shape) {
-            shape.material = material;
+        const selected = this.selectionLayer.getSelectedObject();
+        if (selected instanceof Shape) {
+            selected.material = material;
         }
     }
 }

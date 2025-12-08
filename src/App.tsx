@@ -182,14 +182,14 @@ function getCanvasState(canvas: RaymondCanvas): CanvasState {
     } = canvas;
 
     const selectedShape =
-        canvas.selectionLayer.shapes[
-            canvas.selectionLayer.selectedShapeIndex ?? -1
+        canvas.selectionLayer.objects[
+            canvas.selectionLayer.selectedObjectIndex ?? -1
         ] ?? null;
 
     return {
         cameraSetup: camera.getSetup(),
         cameraTransform: serializeTransform(camera.transform),
-        selectedShape,
+        selectedShape: (selectedShape instanceof Shape) ? selectedShape : null,
     };
 }
 
