@@ -10,7 +10,12 @@ import {
     vec_sub,
 } from "./math.js";
 import { defaultMaterial, type Material } from "./shared/material.js";
-import { type Transform, apply, inverse } from "./transform.js";
+import {
+    type Transform,
+    apply,
+    inverse,
+    transformObject,
+} from "./transform.js";
 import type { Ray } from "./types.js";
 
 const EPS = 0.00001;
@@ -71,6 +76,26 @@ export abstract class Shape {
     hitTest(pointWorld: Vec3): boolean {
         const pointLocal = apply(inverse(this.transform), pointWorld);
         return this._hitTest(pointLocal);
+    }
+
+    // Returns the relative positions in local space of the object's handle
+    handlePositions(): Vec3[] {
+        return [newPoint(0, 1.2)];
+    }
+
+    // TODO: Would be cleaner for shapes not to know about their handles
+    handleMoved(handleIndex: number, _: Vec3, newPos: Vec3) {
+        if (handleIndex !== 0) {
+            return; // Scaling not implemented yet
+        }
+        // We are rotating the shape. The centre of the shape, top of the shape, and mouse position should be collinear.
+        const shapeCentreWorld = apply(this.transform, newPoint(0, 0));
+        const d = vec_sub(newPos, shapeCentreWorld);
+        const theta = Math.atan2(d.y, d.x);
+        this.transform = transformObject(this.transform, (o) => ({
+            ...o,
+            rotation: theta - Math.PI / 2,
+        }));
     }
 }
 

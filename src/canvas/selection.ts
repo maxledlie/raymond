@@ -1,30 +1,17 @@
 import type Camera from "../camera";
 import {
     newPoint,
-    vec_add,
     vec_magnitude,
-    vec_mul,
-    vec_normalize,
     vec_sub,
     type Vec3,
 } from "../math";
-import {
-    apply,
-    transformObject,
-    translateObject,
-    type Transform,
-} from "../transform";
-
-type HandleAction = "scale" | "rotate";
-
-interface Handle {
-    position: Vec3;
-    action: HandleAction;
-}
+import { apply, translateObject, type Transform } from "../transform";
 
 interface Selectable {
     transform: Transform;
     hitTest(worldPoint: Vec3): boolean;
+    handlePositions(): Vec3[];
+    handleMoved(handleIndex: number, oldPos: Vec3, newPos: Vec3): void;
 }
 
 export default class SelectionLayer {
@@ -53,11 +40,14 @@ export default class SelectionLayer {
     mouseDown(screenPoint: Vec3) {
         // Activate a handle if one is hovered
         if (this.selectedObjectIndex != null) {
-            const selectedShape = this.objects[this.selectedObjectIndex];
-            const { rotation, scale } = this.computeHandles(selectedShape);
-            for (const [index, handle] of [rotation, ...scale].entries()) {
-                if (vec_magnitude(vec_sub(handle.position, screenPoint)) < 10) {
-                    this.activeHandleIndex = index;
+            const selected = this.objects[this.selectedObjectIndex];
+            const handles = selected.handlePositions();
+            for (const [i, p] of handles.entries()) {
+                const pScreen = this.camera.worldToScreen(
+                    apply(selected.transform, p)
+                );
+                if (vec_magnitude(vec_sub(pScreen, screenPoint)) < 10) {
+                    this.activeHandleIndex = i;
                     break;
                 }
             }
@@ -89,79 +79,26 @@ export default class SelectionLayer {
 
     mouseMoved(from: Vec3, to: Vec3) {
         // Rotate or scale shape if dragging a handle
-        if (this.selectedObjectIndex != null && this.activeHandleIndex == 0) {
-            // We are rotating the shape. The centre of the shape, top of the shape, and mouse position should be collinear.
-            const shape = this.objects[this.selectedObjectIndex];
-            const shapeCentreWorld = apply(shape.transform, newPoint(0, 0));
-            const mouseWorld = this.camera.screenToWorld(to);
-            const d = vec_sub(mouseWorld, shapeCentreWorld);
-            const theta = Math.atan2(d.y, d.x);
-            shape.transform = transformObject(shape.transform, (o) => ({
-                ...o,
-                rotation: theta - Math.PI / 2,
-            }));
+        const selected = this.getSelectedObject();
+        if (selected && this.activeHandleIndex != null) {
+            selected.handleMoved(
+                this.activeHandleIndex,
+                this.camera.screenToWorld(from),
+                this.camera.screenToWorld(to)
+            );
         }
 
         // Drag selected shape
-        if (
-            this.selectedObjectIndex != null &&
-            this.objects.length > this.selectedObjectIndex &&
-            this.shapeDragged
-        ) {
-            const selectedShape = this.objects[this.selectedObjectIndex];
-
+        if (selected && this.shapeDragged) {
             const dragEndWorld = this.camera.screenToWorld(to);
             const dragStartWorld = this.camera.screenToWorld(from);
             const dragDelta = vec_sub(dragEndWorld, dragStartWorld);
-            selectedShape.transform = translateObject(
-                selectedShape.transform,
-                dragDelta
-            );
+            selected.transform = translateObject(selected.transform, dragDelta);
         }
     }
 
     getSelectedObject(): Selectable | null {
         return this.objects[this.selectedObjectIndex ?? -1] ?? null;
-    }
-
-    /**
-     * Returns the handles that should be drawn around the given shape, assuming it's selected
-     */
-    computeHandles(object: Selectable): { rotation: Handle; scale: Handle[] } {
-        // Handles at each vertex and at the center of each line of the bounding box
-        const handlesLocal = [
-            newPoint(-1, 1),
-            newPoint(0, 1),
-            newPoint(1, 1),
-            newPoint(1, 0),
-            newPoint(1, -1),
-            newPoint(0, -1),
-            newPoint(-1, -1),
-            newPoint(-1, 0),
-        ];
-
-        const scaleHandlesPos = handlesLocal.map((x) =>
-            this.camera.worldToScreen(apply(object.transform, x))
-        );
-
-        const centreScreen = this.camera.worldToScreen(
-            apply(object.transform, newPoint(0, 0))
-        );
-        const topScreen = this.camera.worldToScreen(
-            apply(object.transform, newPoint(0, 1))
-        );
-        const d = vec_normalize(vec_sub(topScreen, centreScreen));
-        const rotationHandlePos = vec_add(topScreen, vec_mul(d, 30));
-
-        const scale: Handle[] = scaleHandlesPos.map((x) => ({
-            position: x,
-            action: "scale",
-        }));
-        const rotation: Handle = {
-            position: rotationHandlePos,
-            action: "rotate",
-        };
-        return { rotation, scale };
     }
 
     draw(ctx: CanvasRenderingContext2D) {
@@ -194,31 +131,18 @@ export default class SelectionLayer {
         ctx.closePath();
         ctx.stroke();
 
-        const { rotation, scale } = this.computeHandles(shape);
-
-        const topScreen = this.camera.worldToScreen(
-            apply(shape.transform, newPoint(0, 1))
-        );
-
-        ctx.beginPath();
-        ctx.moveTo(rotation.position.x, rotation.position.y);
-        ctx.lineTo(topScreen.x, topScreen.y);
-        ctx.stroke();
+        const handles = shape.handlePositions();
 
         ctx.strokeStyle = "black";
-        for (const [i, p] of scale.entries()) {
-            ctx.fillStyle =
-                this.activeHandleIndex === i + 1 ? "green" : "white";
+        for (const [i, p] of handles.entries()) {
+            const pScreen = this.camera.worldToScreen(
+                apply(shape.transform, p)
+            );
+            ctx.fillStyle = this.activeHandleIndex === i ? "green" : "white";
             ctx.beginPath();
-            ctx.arc(p.position.x, p.position.y, 5, 0, 2 * Math.PI);
+            ctx.arc(pScreen.x, pScreen.y, 5, 0, 2 * Math.PI);
             ctx.fill();
-            ctx.stroke();
+            ctx.stroke()
         }
-
-        ctx.fillStyle = this.activeHandleIndex === 0 ? "green" : "white";
-        ctx.beginPath();
-        ctx.arc(rotation.position.x, rotation.position.y, 5, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.stroke();
     }
 }

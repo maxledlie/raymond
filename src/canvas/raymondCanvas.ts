@@ -412,7 +412,7 @@ export class RaymondCanvas extends Canvas {
         ctx.fillStyle = hovered ? "green" : "white";
         ctx.beginPath();
         ctx.moveTo(points[0].x, points[0].y);
-        for (const p of points.slice(1)) {
+       for (const p of points.slice(1)) {
             ctx.lineTo(p.x, p.y);
         }
         ctx.closePath();
