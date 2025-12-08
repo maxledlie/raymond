@@ -310,6 +310,13 @@ export class RaymondCanvas extends Canvas {
             this.drawLine(start, end);
         }
 
+        // Draw what the eye sees!
+        const eye = this.state.eyes[0];
+        if (eye) {
+            for (let i = 0; i < eye.numRays; i++) {
+            }
+        }
+
         state.lastMousePos = mouseScreen;
     }
 

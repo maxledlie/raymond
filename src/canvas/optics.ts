@@ -80,28 +80,20 @@ function _computeSegments(
     const halfWidth = Math.tan(eye.fov / 2);
     const pixelStep = (2 * halfWidth) / eye.numRays;
     const rays: Ray[] = [];
-    for (let i = 0; i < Math.floor(eye.numRays / 2); i++) {
-        const filmPosUpper = vec_sub(
+
+    // There's got to be a better way to do this, but it's 10pm and I'm tired.
+    for (
+        let i = -Math.floor(eye.numRays / 2);
+        i < Math.floor(eye.numRays / 2) + 1;
+        i++
+    ) {
+        const filmPos = vec_add(
             filmCentre,
             vec_mul(filmParallel, i * pixelStep)
         );
-        const filmPosLower = vec_add(
-            filmCentre,
-            vec_mul(filmParallel, i * pixelStep)
-        );
         rays.push({
             start: eyePos,
-            direction: vec_normalize(vec_sub(filmPosUpper, eyePos)),
-        });
-        rays.push({
-            start: eyePos,
-            direction: vec_normalize(vec_sub(filmPosLower, eyePos)),
-        });
-    }
-    if (eye.numRays % 2 == 1) {
-        rays.push({
-            start: eyePos,
-            direction: vec_normalize(vec_sub(filmCentre, eyePos)),
+            direction: vec_normalize(vec_sub(filmPos, eyePos)),
         });
     }
     let allSegments: RaySegment[] = [];
