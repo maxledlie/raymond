@@ -19,8 +19,8 @@ import {
     fromObjectTransform,
     toObjectTransform,
 } from "../transform.js";
-import { Eye as Eye } from "../types.js";
 import { Canvas } from "./canvas.js";
+import { Eye } from "./Eye.js";
 import { computeSegments, toggleSchlick } from "./optics.js";
 import SelectionLayer from "./selection.js";
 
