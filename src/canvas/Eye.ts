@@ -5,7 +5,7 @@ const MAX_RAYS = 60;
 
 export class Eye {
     transform: Transform;
-    numRays: number = 1;
+    numRays: number = MAX_RAYS;
     fov: number = Math.PI / 4;
 
     constructor(transform: Transform) {

@@ -63,6 +63,7 @@ interface State {
     eyes: Eye[];
     cameraPath: Animation | null;
     lights: PointLight[];
+    vision: boolean;
 }
 
 function defaultState(): State {
@@ -78,6 +79,7 @@ function defaultState(): State {
         camera: new Camera(1, 1), // We don't know the screen width and height yet.
         cameraPath: null,
         lights: [],
+        vision: false,
     };
 }
 
@@ -125,8 +127,14 @@ export class RaymondCanvas extends Canvas {
         }
 
         const eyes = [
-            new Eye(fromObjectTransform({ translation: newVector(-6, 0), rotation: 0, scale: newVector(1, 1) }))
-        ]
+            new Eye(
+                fromObjectTransform({
+                    translation: newVector(-6, 0),
+                    rotation: 0,
+                    scale: newVector(1, 1),
+                }),
+            ),
+        ];
 
         for (const e of eyes) {
             state.eyes.push(e);
@@ -134,8 +142,15 @@ export class RaymondCanvas extends Canvas {
         }
 
         const lights = [
-            new PointLight({ r: 1, g: 1, b: 1 }, fromObjectTransform({ translation: newVector(-5, 2), rotation: 0, scale: newVector(1, 1) }))
-        ]
+            new PointLight(
+                { r: 1, g: 1, b: 1 },
+                fromObjectTransform({
+                    translation: newVector(-5, 2),
+                    rotation: 0,
+                    scale: newVector(1, 1),
+                })
+            ),
+        ];
         for (const x of lights) {
             state.lights.push(x);
             this.selectionLayer.addSelectable(x);
@@ -149,6 +164,9 @@ export class RaymondCanvas extends Canvas {
         }
         if (e.key.toUpperCase() === "P") {
             toggleSchlick();
+        }
+        if (e.key.toUpperCase() === "V") {
+            state.vision = !state.vision;
         }
         if (
             e.key === "Delete" &&
@@ -305,6 +323,11 @@ export class RaymondCanvas extends Canvas {
         // Draw status indicators
         ctx.textAlign = "right";
         ctx.fillText(`Debug ${state.debug ? "ON" : "OFF"} (D)`, width - 10, 20);
+        ctx.fillText(
+            `Vision ${state.vision ? "ON" : "OFF"} (V)`,
+            width - 10,
+            40
+        );
         if (state.debug) {
             ctx.fillText(
                 `World: x: ${mouseWorld.x.toFixed(
@@ -371,7 +394,7 @@ export class RaymondCanvas extends Canvas {
         this.selectionLayer.draw(this.ctx);
 
         // Work out the segments to actually draw
-        const { segments } = computeSegments(eyes, shapes, lights);
+        const { segments, vision } = computeSegments(eyes, shapes, lights);
 
         ctx.lineWidth = 2;
         for (const { start, end, color, attenuation } of segments) {
@@ -380,24 +403,25 @@ export class RaymondCanvas extends Canvas {
         }
 
         // Draw what the eye sees!
-        // const pad = 40;
-        // const eye = this.state.eyes[0];
-        // if (eye) {
-        //     const xStep = (this.width - 2 * pad) / eye.numRays;
-        //     for (let i = 0; i < eye.numRays; i++) {
-        //         console.log("vision: ", vision);
-        //         ctx.fillStyle = color_html(
-        //             vision[i] ?? { r: 0, g: 0, b: 0 },
-        //             1
-        //         );
-        //         ctx.fillRect(
-        //             pad + i * xStep,
-        //             this.height - 110,
-        //             xStep + 1,
-        //             100
-        //         );
-        //     }
-        // }
+        if (state.vision) {
+            const pad = 40;
+            const eye = this.state.eyes[0];
+            if (eye) {
+                const xStep = (this.width - 2 * pad) / eye.numRays;
+                for (let i = 0; i < eye.numRays; i++) {
+                    ctx.fillStyle = color_html(
+                        vision[i] ?? { r: 0, g: 0, b: 0 },
+                        1
+                    );
+                    ctx.fillRect(
+                        pad + i * xStep,
+                        this.height - 110,
+                        xStep + 1,
+                        100
+                    );
+                }
+            }
+        }
 
         state.lastMousePos = mouseScreen;
     }
