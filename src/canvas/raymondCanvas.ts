@@ -115,7 +115,7 @@ export class RaymondCanvas extends Canvas {
                 }),
                 {
                     ...defaultMaterial(),
-                    color: { r: 200, g: 0, b: 150 },
+                    color: { r: 200 / 255, g: 0, b: 150 / 255 },
                     reflectivity: 0.9,
                 }
             ),
