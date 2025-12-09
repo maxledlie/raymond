@@ -173,7 +173,7 @@ function castRay(
     );
 
     let color;
-    const material = data.shape.material;
+    const material = data.shape.material
 
     if (
         SCHLICK_ENABLED &&
