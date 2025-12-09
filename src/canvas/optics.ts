@@ -13,9 +13,9 @@ import {
 } from "../math";
 import { Shape, type Intersection } from "../shapes";
 import { color_add, color_mul, type Color } from "../shared/color";
-import { apply, toObjectTransform } from "../transform";
+import { apply } from "../transform";
 import type { Ray } from "../types";
-import type { Eye } from "./Eye";
+import { Eye } from "./Eye";
 
 export interface RaySegment {
     start: Vec3;
@@ -64,10 +64,8 @@ function _computeSegments(
     eye: Eye,
     shapes: Shape[],
     maxDepth: number = 10
-): RaySegment[] {
+): OpticsResult {
     // Calculate initial rays
-    const o = toObjectTransform(eye.transform);
-    console.log(o);
     const eyePos = apply(eye.transform, newPoint(0, 0));
     const eyeDir = vec_normalize(
         vec_sub(
@@ -97,11 +95,21 @@ function _computeSegments(
         });
     }
     let allSegments: RaySegment[] = [];
+    const vision: Color[] = [];
     for (const ray of rays) {
-        allSegments = allSegments.concat(castRay(shapes, ray, maxDepth, 1));
+        const segments = castRay(shapes, ray, maxDepth, 1);
+        if (segments.length === 0) {
+            vision.push(BLACK);
+        } else {
+            vision.push(segments[0].color);
+        }
+        allSegments = allSegments.concat(segments);
     }
 
-    return allSegments;
+    return {
+        segments: allSegments,
+        vision,
+    };
 }
 
 function castRay(
@@ -110,9 +118,6 @@ function castRay(
     remaining: number,
     attenuation: number
 ): RaySegment[] {
-    console.log(
-        `Casting ray from ${ray.start.x}, ${ray.start.y} in direction ${ray.direction.x}, ${ray.direction.y}`
-    );
     const intersections = shapes.flatMap((shape) =>
         shape.intersect(ray).map((t) => ({ t, shape }))
     );
@@ -315,8 +320,19 @@ function computeIntersectionData(
     };
 }
 
-export function computeSegments(lasers: Eye[], shapes: Shape[]): RaySegment[] {
-    return lasers.flatMap((laser) => _computeSegments(laser, shapes));
+export interface OpticsResult {
+    segments: RaySegment[];
+    vision: Color[];
+}
+export function computeSegments(eyes: Eye[], shapes: Shape[]): OpticsResult {
+    if (eyes[0]) {
+        return _computeSegments(eyes[0], shapes);
+    } else {
+        return {
+            segments: [],
+            vision: [],
+        };
+    }
 }
 
 function reflect(inVec: Vec3, normal: Vec3) {
