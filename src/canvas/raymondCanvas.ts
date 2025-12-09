@@ -301,7 +301,7 @@ export class RaymondCanvas extends Canvas {
         this.selectionLayer.draw(this.ctx);
 
         // Work out the segments to actually draw
-        const { segments, vision } = computeSegments(eyes, shapes);
+        const { segments } = computeSegments(eyes, shapes);
 
         ctx.lineWidth = 2;
         for (const { start, end, color, attenuation } of segments) {
