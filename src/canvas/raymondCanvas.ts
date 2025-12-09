@@ -100,8 +100,9 @@ export class RaymondCanvas extends Canvas {
             e.key === "Delete" &&
             this.selectionLayer.selectedObjectIndex != null
         ) {
-            state.shapes.splice(this.selectionLayer.selectedObjectIndex, 1);
             const selectedObject = this.selectionLayer.getSelectedObject();
+            state.shapes = state.shapes.filter(s => s !== selectedObject);
+            state.eyes = state.eyes.filter(e => e !== selectedObject);
             this.selectionLayer.removeSelectable(selectedObject!);
         }
         for (const tool of tools) {
