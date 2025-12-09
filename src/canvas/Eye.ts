@@ -1,7 +1,7 @@
 import { newPoint, vec_sub, type Vec3 } from "../math";
 import { apply, inverse, transformObject, type Transform } from "../transform";
 
-const MAX_RAYS = 30;
+const MAX_RAYS = 60;
 
 export class Eye {
     transform: Transform;

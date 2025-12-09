@@ -14,6 +14,7 @@ export default function CameraPanel({
     transform,
     setTransform,
 }: CameraPanelProps) {
+    return <></>;
     return (
         <div>
             <h2>Camera</h2>
@@ -50,9 +51,7 @@ export default function CameraPanel({
             <VectorDisplay
                 name="Scale"
                 vector={transform.scale}
-                setVector={(v) =>
-                    setTransform({ ...transform, scale: v })
-                }
+                setVector={(v) => setTransform({ ...transform, scale: v })}
             />
         </div>
     );

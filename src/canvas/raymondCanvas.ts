@@ -301,8 +301,7 @@ export class RaymondCanvas extends Canvas {
         this.selectionLayer.draw(this.ctx);
 
         // Work out the segments to actually draw
-        const segments = computeSegments(eyes, shapes);
-        console.log(segments);
+        const { segments, vision } = computeSegments(eyes, shapes);
 
         ctx.lineWidth = 2;
         for (const { start, end, color, attenuation } of segments) {
@@ -311,11 +310,24 @@ export class RaymondCanvas extends Canvas {
         }
 
         // Draw what the eye sees!
-        const eye = this.state.eyes[0];
-        if (eye) {
-            for (let i = 0; i < eye.numRays; i++) {
-            }
-        }
+        // const pad = 40;
+        // const eye = this.state.eyes[0];
+        // if (eye) {
+        //     const xStep = (this.width - 2 * pad) / eye.numRays;
+        //     for (let i = 0; i < eye.numRays; i++) {
+        //         console.log("vision: ", vision);
+        //         ctx.fillStyle = color_html(
+        //             vision[i] ?? { r: 0, g: 0, b: 0 },
+        //             1
+        //         );
+        //         ctx.fillRect(
+        //             pad + i * xStep,
+        //             this.height - 110,
+        //             xStep + 1,
+        //             100
+        //         );
+        //     }
+        // }
 
         state.lastMousePos = mouseScreen;
     }
@@ -421,7 +433,7 @@ export class RaymondCanvas extends Canvas {
         ctx.beginPath();
         ctx.moveTo(points[0].x, points[0].y);
         for (const p of points.slice(1)) {
-            ctx.lineTo(p.x,p.y);
+            ctx.lineTo(p.x, p.y);
         }
         ctx.closePath();
         ctx.fill();
