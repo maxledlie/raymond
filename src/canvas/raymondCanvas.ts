@@ -12,7 +12,7 @@ import {
 } from "../math.js";
 import { Shape, Quad, Circle } from "../shapes.js";
 import { color_add, color_html, color_mul } from "../shared/color.js";
-import type { Material } from "../shared/material.js";
+import { defaultMaterial, type Material } from "../shared/material.js";
 import {
     type Transform,
     apply,
@@ -86,9 +86,60 @@ export class RaymondCanvas extends Canvas {
     selectionLayer: SelectionLayer = new SelectionLayer(this.state.camera);
 
     setup() {
+        const { state } = this;
         // We have to set these again once things are initialised.
-        this.state.camera = new Camera(this.width, this.height);
+        state.camera = new Camera(this.width, this.height);
         this.selectionLayer = new SelectionLayer(this.state.camera);
+
+        // Set up default world
+        const shapes = [
+            new Circle(
+                fromObjectTransform({
+                    translation: newVector(0, 0),
+                    scale: newVector(1, 3),
+                    rotation: 0,
+                }),
+                {
+                    ...defaultMaterial(),
+                    transparency: 0.5,
+                    reflectivity: 0.1,
+                }
+            ),
+            new Quad(
+                fromObjectTransform({
+                    translation: newVector(8, 0),
+                    scale: newVector(1, 20),
+                    rotation: 0,
+                }),
+                {
+                    ...defaultMaterial(),
+                    color: { r: 200, g: 0, b: 150 },
+                    reflectivity: 0.9,
+                }
+            ),
+        ];
+
+        for (const s of shapes) {
+            state.shapes.push(s);
+            this.selectionLayer.addSelectable(s);
+        }
+
+        const eyes = [
+            new Eye(fromObjectTransform({ translation: newVector(-6, 0), rotation: 0, scale: newVector(1, 1) }))
+        ]
+
+        for (const e of eyes) {
+            state.eyes.push(e);
+            this.selectionLayer.addSelectable(e);
+        }
+
+        const lights = [
+            new PointLight({ r: 1, g: 1, b: 1 }, fromObjectTransform({ translation: newVector(-5, 2), rotation: 0, scale: newVector(1, 1) }))
+        ]
+        for (const x of lights) {
+            state.lights.push(x);
+            this.selectionLayer.addSelectable(x);
+        }
     }
 
     keyPressed(e: KeyboardEvent): void {
