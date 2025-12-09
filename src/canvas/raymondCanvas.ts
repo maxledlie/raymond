@@ -19,6 +19,7 @@ import {
     fromObjectTransform,
     toObjectTransform,
 } from "../transform.js";
+import { PointLight } from "./PointLight.js";
 import { Canvas } from "./canvas.js";
 import { Eye } from "./Eye.js";
 import { computeSegments, toggleSchlick } from "./optics.js";
@@ -61,6 +62,7 @@ interface State {
     panStart: Vec3 | null;
     eyes: Eye[];
     cameraPath: Animation | null;
+    lights: PointLight[];
 }
 
 function defaultState(): State {
@@ -75,6 +77,7 @@ function defaultState(): State {
         shapes: [],
         camera: new Camera(1, 1), // We don't know the screen width and height yet.
         cameraPath: null,
+        lights: [],
     };
 }
 
@@ -101,8 +104,8 @@ export class RaymondCanvas extends Canvas {
             this.selectionLayer.selectedObjectIndex != null
         ) {
             const selectedObject = this.selectionLayer.getSelectedObject();
-            state.shapes = state.shapes.filter(s => s !== selectedObject);
-            state.eyes = state.eyes.filter(e => e !== selectedObject);
+            state.shapes = state.shapes.filter((s) => s !== selectedObject);
+            state.eyes = state.eyes.filter((e) => e !== selectedObject);
             this.selectionLayer.removeSelectable(selectedObject!);
         }
         for (const tool of tools) {
@@ -150,6 +153,12 @@ export class RaymondCanvas extends Canvas {
                 if (previewEye) {
                     state.eyes.push(previewEye);
                     this.selectionLayer.addSelectable(previewEye);
+                }
+            } else if (state.tool === "light") {
+                const previewLight = this.computePreviewLight();
+                if (previewLight) {
+                    state.lights.push(previewLight);
+                    this.selectionLayer.addSelectable(previewLight);
                 }
             } else {
                 const previewShape = this.computePreviewShape();
@@ -276,6 +285,7 @@ export class RaymondCanvas extends Canvas {
         // Draw preview entities
         let previewEye = this.computePreviewEye();
         let previewShape = this.computePreviewShape();
+        let previewLight = this.computePreviewLight();
 
         const eyes = [...state.eyes];
         if (previewEye) {
@@ -284,6 +294,10 @@ export class RaymondCanvas extends Canvas {
         const shapes: Shape[] = [...state.shapes];
         if (previewShape) {
             shapes.push(previewShape);
+        }
+        const lights = [...state.lights];
+        if (previewLight) {
+            lights.push(previewLight);
         }
 
         // Draw eyes including preview eye
@@ -298,11 +312,15 @@ export class RaymondCanvas extends Canvas {
             this.drawShape(shape, hovered);
         }
 
+        for (const light of lights) {
+            this.drawLight(light);
+        }
+
         // Draw selection box and handles for selected shape
         this.selectionLayer.draw(this.ctx);
 
         // Work out the segments to actually draw
-        const { segments } = computeSegments(eyes, shapes);
+        const { segments } = computeSegments(eyes, shapes, lights);
 
         ctx.lineWidth = 2;
         for (const { start, end, color, attenuation } of segments) {
@@ -440,6 +458,31 @@ export class RaymondCanvas extends Canvas {
         ctx.fill();
         ctx.stroke();
         ctx.lineWidth = 1;
+    }
+
+    drawLight(light: PointLight) {
+        const { ctx, state } = this;
+
+        // Get combination of object and camera transforms
+
+        // Get the combination of object and camera transforms
+        const mat = mat3_mul_mat(state.camera.transform, light.transform);
+        const oldTransform = ctx.getTransform();
+        ctx.setTransform(
+            mat[0][0],
+            mat[1][0],
+            mat[0][1],
+            mat[1][1],
+            mat[0][2],
+            mat[1][2]
+        );
+
+        const CIRCLE_RADIUS = 0.1;
+        ctx.fillStyle = color_html(light.color, 1);
+        ctx.beginPath();
+        ctx.arc(0, 0, CIRCLE_RADIUS, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.setTransform(oldTransform);
     }
 
     drawQuad() {
@@ -609,6 +652,21 @@ export class RaymondCanvas extends Canvas {
             ),
         });
         return new Eye(transform);
+    }
+
+    computePreviewLight(): PointLight | null {
+        const { state } = this;
+        if (state.placementStartWorld == null || state.tool !== "light") {
+            return null;
+        }
+        const transform = fromObjectTransform({
+            scale: newVector(1, 1),
+            rotation: 0,
+            translation: state.camera.screenToWorld(
+                newPoint(this.mouseX, this.mouseY)
+            ),
+        });
+        return new PointLight({ r: 1, g: 1, b: 1 }, transform);
     }
 
     // Functions for updates via UI
