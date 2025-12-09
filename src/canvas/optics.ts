@@ -12,10 +12,16 @@ import {
     type Vec3,
 } from "../math";
 import { Shape, type Intersection } from "../shapes";
-import { color_add, color_mul, type Color } from "../shared/color";
-import { apply } from "../transform";
+import {
+    color_add,
+    color_hadamard,
+    color_mul,
+    type Color,
+} from "../shared/color";
+import { apply, toObjectTransform } from "../transform";
 import type { Ray } from "../types";
 import { Eye } from "./Eye";
+import type { PointLight } from "./PointLight";
 
 export interface RaySegment {
     start: Vec3;
@@ -63,6 +69,7 @@ interface IntersectionData {
 function _computeSegments(
     eye: Eye,
     shapes: Shape[],
+    lights: PointLight[],
     maxDepth: number = 10
 ): OpticsResult {
     // Calculate initial rays
@@ -97,7 +104,7 @@ function _computeSegments(
     let allSegments: RaySegment[] = [];
     const vision: Color[] = [];
     for (const ray of rays) {
-        const segments = castRay(shapes, ray, maxDepth, 1);
+        const segments = castRay(shapes, lights, ray, maxDepth, 1);
         if (segments.length === 0) {
             vision.push(BLACK);
         } else {
@@ -114,6 +121,7 @@ function _computeSegments(
 
 function castRay(
     shapes: Shape[],
+    lights: PointLight[],
     ray: Ray,
     remaining: number,
     attenuation: number
@@ -136,9 +144,24 @@ function castRay(
     const data = computeIntersectionData(hit, ray, intersections);
 
     // Shade hit
-    const surface = data.shape.material.color; // TODO: Phong reflection model
-    const reflected = castReflectedRay(shapes, data, remaining, attenuation);
-    const refracted = castRefractedRay(shapes, data, remaining, attenuation);
+    let surface = BLACK;
+    for (const light of lights) {
+        surface = color_add(surface, lighting(data, light));
+    }
+    const reflected = castReflectedRay(
+        shapes,
+        lights,
+        data,
+        remaining,
+        attenuation
+    );
+    const refracted = castRefractedRay(
+        shapes,
+        lights,
+        data,
+        remaining,
+        attenuation
+    );
 
     const reflectedColor = color_mul(
         reflected[0]?.color ?? BLACK,
@@ -178,8 +201,37 @@ function castRay(
     return [firstSegment, ...reflected, ...refracted];
 }
 
+function lighting(data: IntersectionData, light: PointLight): Color {
+    const material = data.shape.material;
+    const effectiveColor = color_hadamard(material.color, light.color);
+    const o = toObjectTransform(light.transform);
+    const lightv = vec_normalize(vec_sub(o.translation, data.point));
+    const ambient = color_mul(effectiveColor, material.ambient);
+
+    const lightDotNormal = vec_dot(lightv, data.normalv);
+    let diffuse;
+    let specular;
+    if (lightDotNormal < 0) {
+        diffuse = BLACK;
+        specular = BLACK;
+    } else {
+        diffuse = color_mul(effectiveColor, material.diffuse * lightDotNormal);
+        const reflectv = reflect(vec_mul(lightv, -1), data.eyev);
+        const reflectDotEye = vec_dot(reflectv, data.eyev);
+
+        if (reflectDotEye <= 0) {
+            specular = BLACK;
+        } else {
+            const factor = Math.pow(reflectDotEye, material.shininess);
+            specular = color_mul(light.color, material.specular * factor);
+        }
+    }
+    return color_add(color_add(ambient, diffuse), specular);
+}
+
 function castReflectedRay(
     shapes: Shape[],
+    lights: PointLight[],
     data: IntersectionData,
     remaining: number,
     attenuation: number
@@ -194,6 +246,7 @@ function castReflectedRay(
     };
     return castRay(
         shapes,
+        lights,
         ray,
         remaining - 1,
         attenuation * data.shape.material.reflectivity
@@ -202,6 +255,7 @@ function castReflectedRay(
 
 function castRefractedRay(
     shapes: Shape[],
+    lights: PointLight[],
     data: IntersectionData,
     remaining: number,
     attenuation: number
@@ -234,6 +288,7 @@ function castRefractedRay(
 
     return castRay(
         shapes,
+        lights,
         refractedRay,
         remaining - 1,
         attenuation * data.shape.material.transparency
@@ -324,9 +379,13 @@ export interface OpticsResult {
     segments: RaySegment[];
     vision: Color[];
 }
-export function computeSegments(eyes: Eye[], shapes: Shape[]): OpticsResult {
+export function computeSegments(
+    eyes: Eye[],
+    shapes: Shape[],
+    lights: PointLight[]
+): OpticsResult {
     if (eyes[0]) {
-        return _computeSegments(eyes[0], shapes);
+        return _computeSegments(eyes[0], shapes, lights);
     } else {
         return {
             segments: [],

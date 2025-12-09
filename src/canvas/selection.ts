@@ -1,10 +1,5 @@
 import type Camera from "../camera";
-import {
-    newPoint,
-    vec_magnitude,
-    vec_sub,
-    type Vec3,
-} from "../math";
+import { newPoint, vec_magnitude, vec_sub, type Vec3 } from "../math";
 import { apply, translateObject, type Transform } from "../transform";
 
 interface Selectable {
@@ -142,7 +137,7 @@ export default class SelectionLayer {
             ctx.beginPath();
             ctx.arc(pScreen.x, pScreen.y, 5, 0, 2 * Math.PI);
             ctx.fill();
-            ctx.stroke()
+            ctx.stroke();
         }
     }
 }

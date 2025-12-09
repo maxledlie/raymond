@@ -17,3 +17,7 @@ export function color_html(color: Color, alpha: number): string {
         color.b * 255
     }, ${alpha})`;
 }
+
+export function color_hadamard(a: Color, b: Color): Color {
+    return { r: a.r * b.r, g: a.g * b.g, b: a.b * b.b };
+}

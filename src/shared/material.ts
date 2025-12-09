@@ -5,6 +5,11 @@ export interface Material {
     reflectivity: number;
     transparency: number;
     refractiveIndex: number;
+
+    ambient: number;
+    diffuse: number;
+    specular: number;
+    shininess: number;
 }
 
 export function defaultMaterial(): Material {
@@ -13,5 +18,10 @@ export function defaultMaterial(): Material {
         reflectivity: 0,
         transparency: 0,
         refractiveIndex: 1.5,
+
+        ambient: 0.1,
+        diffuse: 0.9,
+        specular: 0.9,
+        shininess: 200,
     };
 }
