@@ -164,6 +164,7 @@ function castRay(
         const shadowed = isShadowed(data.overPoint, shapes, light);
         surface = color_add(surface, lighting(data, light, shadowed));
     }
+    surface = color_mul(surface, 1 - data.shape.material.transparency);
     const reflected = castReflectedRay(
         shapes,
         lights,
