@@ -171,6 +171,7 @@ export class RaymondCanvas extends Canvas {
             selectedObject !== state.eye
         ) {
             state.shapes = state.shapes.filter((s) => s !== selectedObject);
+            state.lights = state.lights.filter((l) => l !== selectedObject);
             this.selectionLayer.removeSelectable(selectedObject!);
         }
         for (const tool of tools) {
