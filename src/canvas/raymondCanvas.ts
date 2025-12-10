@@ -25,7 +25,7 @@ import { Eye } from "./Eye.js";
 import { computeSegments, setLogging, toggleSchlick } from "./optics.js";
 import SelectionLayer from "./selection.js";
 
-type ToolType = "eye" | "quad" | "circle" | "pan" | "select" | "light";
+type ToolType = "quad" | "circle" | "pan" | "select" | "light";
 
 const FRAME_RATE = 60;
 
@@ -36,7 +36,6 @@ interface Tool {
 }
 
 const tools: Tool[] = [
-    { type: "eye", name: "Eye", hotkey: "e" },
     { type: "circle", name: "Circle", hotkey: "c" },
     { type: "quad", name: "Quad", hotkey: "q" },
     { type: "pan", name: "Pan", hotkey: "p" },
@@ -60,7 +59,7 @@ interface State {
     isMouseDown: boolean;
     placementStartWorld: Vec3 | null;
     panStart: Vec3 | null;
-    eyes: Eye[];
+    eye: Eye;
     cameraPath: Animation | null;
     lights: PointLight[];
     vision: boolean;
@@ -73,8 +72,14 @@ function defaultState(): State {
         isMouseDown: false,
         placementStartWorld: null,
         panStart: null,
-        tool: "eye",
-        eyes: [],
+        tool: "select",
+        eye: new Eye(
+            fromObjectTransform({
+                translation: newVector(-6, 0),
+                rotation: 0,
+                scale: newVector(1, 1),
+            })
+        ),
         shapes: [],
         camera: new Camera(1, 1), // We don't know the screen width and height yet.
         cameraPath: null,
@@ -126,20 +131,7 @@ export class RaymondCanvas extends Canvas {
             this.selectionLayer.addSelectable(s);
         }
 
-        const eyes = [
-            new Eye(
-                fromObjectTransform({
-                    translation: newVector(-6, 0),
-                    rotation: 0,
-                    scale: newVector(1, 1),
-                })
-            ),
-        ];
-
-        for (const e of eyes) {
-            state.eyes.push(e);
-            this.selectionLayer.addSelectable(e);
-        }
+        this.selectionLayer.addSelectable(state.eye);
 
         const lights = [
             new PointLight(
@@ -171,13 +163,14 @@ export class RaymondCanvas extends Canvas {
         if (e.key === "1") {
             setLogging(true);
         }
+
+        const selectedObject = this.selectionLayer.getSelectedObject();
         if (
             e.key === "Delete" &&
-            this.selectionLayer.selectedObjectIndex != null
+            selectedObject &&
+            selectedObject !== state.eye
         ) {
-            const selectedObject = this.selectionLayer.getSelectedObject();
             state.shapes = state.shapes.filter((s) => s !== selectedObject);
-            state.eyes = state.eyes.filter((e) => e !== selectedObject);
             this.selectionLayer.removeSelectable(selectedObject!);
         }
         for (const tool of tools) {
@@ -226,13 +219,7 @@ export class RaymondCanvas extends Canvas {
         state.isMouseDown = false;
         this.selectionLayer.mouseUp();
         if (e.button === 0) {
-            if (state.tool === "eye") {
-                const previewEye = this.computePreviewEye();
-                if (previewEye) {
-                    state.eyes.push(previewEye);
-                    this.selectionLayer.addSelectable(previewEye);
-                }
-            } else if (state.tool === "light") {
+            if (state.tool === "light") {
                 const previewLight = this.computePreviewLight();
                 if (previewLight) {
                     state.lights.push(previewLight);
@@ -366,14 +353,9 @@ export class RaymondCanvas extends Canvas {
         this.drawCoordinates(mat3_identity(), majorColor, minorColor, 100);
 
         // Draw preview entities
-        let previewEye = this.computePreviewEye();
         let previewShape = this.computePreviewShape();
         let previewLight = this.computePreviewLight();
 
-        const eyes = [...state.eyes];
-        if (previewEye) {
-            eyes.push(previewEye);
-        }
         const shapes: Shape[] = [...state.shapes];
         if (previewShape) {
             shapes.push(previewShape);
@@ -381,12 +363,6 @@ export class RaymondCanvas extends Canvas {
         const lights = [...state.lights];
         if (previewLight) {
             lights.push(previewLight);
-        }
-
-        // Draw eyes including preview eye
-        for (const eye of eyes) {
-            const hovered = eye.hitTest(mouseWorld);
-            this.drawEye(ctx, eye, hovered);
         }
 
         // Draw shapes including preview shape
@@ -399,11 +375,13 @@ export class RaymondCanvas extends Canvas {
             this.drawLight(light);
         }
 
+        this.drawEye(ctx, state.eye, false);
+
         // Draw selection box and handles for selected shape
         this.selectionLayer.draw(this.ctx);
 
         // Work out the segments to actually draw
-        const { segments, vision } = computeSegments(eyes, shapes, lights);
+        const { segments, vision } = computeSegments(state.eye, shapes, lights);
 
         ctx.lineWidth = 2;
         for (const { start, end, color, attenuation } of segments) {
@@ -414,10 +392,9 @@ export class RaymondCanvas extends Canvas {
         // Draw what the eye sees!
         if (state.vision) {
             const pad = 40;
-            const eye = this.state.eyes[0];
-            if (eye) {
-                const xStep = (this.width - 2 * pad) / eye.numRays;
-                for (let i = 0; i < eye.numRays; i++) {
+            if (state.eye) {
+                const xStep = (this.width - 2 * pad) / state.eye.numRays;
+                for (let i = 0; i < state.eye.numRays; i++) {
                     ctx.fillStyle = color_html(
                         vision[i] ?? { r: 0, g: 0, b: 0 },
                         1
@@ -719,7 +696,7 @@ export class RaymondCanvas extends Canvas {
 
     computePreviewEye(): Eye | null {
         const { state } = this;
-        if (state.placementStartWorld == null || state.tool !== "eye") {
+        if (state.placementStartWorld == null) {
             return null;
         }
         const end = state.camera.screenToWorld(
