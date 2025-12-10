@@ -6,6 +6,7 @@ import {
     newVector,
     vec_add,
     vec_dot,
+    vec_magnitude,
     vec_mul,
     vec_normalize,
     vec_sub,
@@ -28,10 +29,12 @@ export interface RaySegment {
     end: Vec3;
     color: Color;
     attenuation: number;
+    dashed?: boolean;
 }
 
 const BLACK: Color = { r: 0, g: 0, b: 0 };
 let SCHLICK_ENABLED = true;
+let doLogging = false;
 
 interface IntersectionData {
     t: number;
@@ -45,6 +48,10 @@ interface IntersectionData {
     reflectv: Vec3;
     n1: number;
     n2: number;
+}
+
+export function setLogging(logging: boolean) {
+    doLogging = logging;
 }
 
 /**
@@ -72,6 +79,9 @@ function _computeSegments(
     lights: PointLight[],
     maxDepth: number = 10
 ): OpticsResult {
+    if (doLogging) {
+        console.log("Computing segments for eye: ", eye);
+    }
     // Calculate initial rays
     const eyePos = apply(eye.transform, newPoint(0, 0));
     const eyeDir = vec_normalize(
@@ -143,10 +153,16 @@ function castRay(
 
     const data = computeIntersectionData(hit, ray, intersections);
 
+    if (doLogging) {
+        console.log("Intersection data:");
+        console.log(data);
+    }
+
     // Shade hit
     let surface = BLACK;
     for (const light of lights) {
-        surface = color_add(surface, lighting(data, light));
+        const shadowed = isShadowed(data.overPoint, shapes, light);
+        surface = color_add(surface, lighting(data, light, shadowed));
     }
     const reflected = castReflectedRay(
         shapes,
@@ -172,8 +188,13 @@ function castRay(
         data.shape.material.transparency
     );
 
+    if (doLogging) {
+        console.log("reflected color: ", reflectedColor);
+        console.log("refracted color: ", refractedColor);
+    }
+
     let color;
-    const material = data.shape.material
+    const material = data.shape.material;
 
     if (
         SCHLICK_ENABLED &&
@@ -201,12 +222,24 @@ function castRay(
     return [firstSegment, ...reflected, ...refracted];
 }
 
-function lighting(data: IntersectionData, light: PointLight): Color {
+function lighting(
+    data: IntersectionData,
+    light: PointLight,
+    inShadow: boolean
+): Color {
     const material = data.shape.material;
     const effectiveColor = color_hadamard(material.color, light.color);
     const o = toObjectTransform(light.transform);
-    const lightv = vec_normalize(vec_sub(o.translation, data.point));
+    const lightPos = newPoint(o.translation.x, o.translation.y);
+    if (doLogging) {
+        console.log("lightPos: ", lightPos);
+    }
+    const lightv = vec_normalize(vec_sub(lightPos, data.point));
     const ambient = color_mul(effectiveColor, material.ambient);
+
+    if (inShadow) {
+        return ambient;
+    }
 
     const lightDotNormal = vec_dot(lightv, data.normalv);
     let diffuse;
@@ -400,4 +433,27 @@ function reflect(inVec: Vec3, normal: Vec3) {
 
 function pointOnRay(ray: Ray, t: number): Vec3 {
     return vec_add(ray.start, vec_mul(ray.direction, t));
+}
+
+/**
+ * Returns whether or not the given point is in shadow w.r.t. the given point light source.
+ */
+function isShadowed(point: Vec3, shapes: Shape[], light: PointLight): boolean {
+    const o = toObjectTransform(light.transform);
+    const v = vec_sub(newPoint(o.translation.x, o.translation.y), point);
+    const distance = vec_magnitude(v);
+    const direction = vec_normalize(v);
+
+    const ray: Ray = {
+        start: point,
+        direction,
+    };
+
+    const intersections = shapes.flatMap((shape) =>
+        shape.intersect(ray).map((t) => ({ t, shape }))
+    );
+
+    intersections.sort((a, b) => a.t - b.t);
+    const hit = intersections.find((x) => x.t >= 0);
+    return hit != null && hit.t < distance;
 }

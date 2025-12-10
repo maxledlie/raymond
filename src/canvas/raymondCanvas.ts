@@ -22,7 +22,7 @@ import {
 import { PointLight } from "./PointLight.js";
 import { Canvas } from "./canvas.js";
 import { Eye } from "./Eye.js";
-import { computeSegments, toggleSchlick } from "./optics.js";
+import { computeSegments, setLogging, toggleSchlick } from "./optics.js";
 import SelectionLayer from "./selection.js";
 
 type ToolType = "eye" | "quad" | "circle" | "pan" | "select" | "light";
@@ -132,7 +132,7 @@ export class RaymondCanvas extends Canvas {
                     translation: newVector(-6, 0),
                     rotation: 0,
                     scale: newVector(1, 1),
-                }),
+                })
             ),
         ];
 
@@ -168,6 +168,9 @@ export class RaymondCanvas extends Canvas {
         if (e.key.toUpperCase() === "V") {
             state.vision = !state.vision;
         }
+        if (e.key === "1") {
+            setLogging(true);
+        }
         if (
             e.key === "Delete" &&
             this.selectionLayer.selectedObjectIndex != null
@@ -181,6 +184,12 @@ export class RaymondCanvas extends Canvas {
             if (e.key.toUpperCase() === tool.hotkey.toUpperCase()) {
                 state.tool = tool.type;
             }
+        }
+    }
+
+    keyUp(e: KeyboardEvent): void {
+        if (e.key === "1") {
+            setLogging(false);
         }
     }
 

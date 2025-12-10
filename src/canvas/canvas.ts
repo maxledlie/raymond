@@ -45,6 +45,7 @@ export abstract class Canvas {
         _canvas.onmouseup = (e: MouseEvent) => this.mouseReleased(e);
         _canvas.onwheel = (e: WheelEvent) => this.mouseWheel(e);
         _canvas.onkeydown = (e: KeyboardEvent) => this.keyPressed(e);
+        _canvas.onkeyup = (e: KeyboardEvent) => this.keyUp(e);
         _canvas.ondblclick = (e: MouseEvent) => this.doubleClicked(e);
     }
 
@@ -68,5 +69,6 @@ export abstract class Canvas {
     abstract mouseMoved(e: MouseEvent): void;
     abstract mouseWheel(e: WheelEvent): void;
     abstract keyPressed(e: KeyboardEvent): void;
+    abstract keyUp(e: KeyboardEvent): void;
     abstract doubleClicked(e: MouseEvent): void;
 }
