@@ -160,9 +160,13 @@ function castRay(
 
     // Shade hit
     let surface = BLACK;
-    for (const light of lights) {
-        const shadowed = isShadowed(data.overPoint, shapes, light);
-        surface = color_add(surface, lighting(data, light, shadowed));
+    if (lights.length > 0) {
+        for (const light of lights) {
+            const shadowed = isShadowed(data.overPoint, shapes, light);
+            surface = color_add(surface, lighting(data, light, shadowed));
+        }
+    } else {
+        surface = data.shape.material.color;
     }
     surface = color_mul(surface, 1 - data.shape.material.transparency);
     const reflected = castReflectedRay(
