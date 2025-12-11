@@ -11,7 +11,12 @@ import {
     mat3_identity,
 } from "../math.js";
 import { Shape, Quad, Circle } from "../shapes.js";
-import { color_add, color_html, color_mul, type Color } from "../shared/color.js";
+import {
+    color_add,
+    color_html,
+    color_mul,
+    type Color,
+} from "../shared/color.js";
 import { defaultMaterial, type Material } from "../shared/material.js";
 import {
     type Transform,
@@ -63,6 +68,7 @@ interface State {
     cameraPath: Animation | null;
     lights: PointLight[];
     vision: boolean;
+    lastCameraSetup: CameraSetup | null;
 }
 
 function defaultState(): State {
@@ -85,6 +91,7 @@ function defaultState(): State {
         cameraPath: null,
         lights: [],
         vision: false,
+        lastCameraSetup: null,
     };
 }
 
@@ -159,6 +166,15 @@ export class RaymondCanvas extends Canvas {
         }
         if (e.key.toUpperCase() === "V") {
             state.vision = !state.vision;
+        }
+        if (e.key.toUpperCase() === "B" && state.lastCameraSetup) {
+            // For demo purposes, bring camera back to previous position
+            state.cameraPath = {
+                from: { ...state.camera.getSetup() },
+                to: state.lastCameraSetup,
+                time: 0,
+                end: 2,
+            };
         }
         if (e.key === "1") {
             setLogging(true);
@@ -263,6 +279,7 @@ export class RaymondCanvas extends Canvas {
                 rotation: o.rotation,
                 size: newVector(o.scale.x * aspectRatio * 10, o.scale.y * 10),
             };
+            state.lastCameraSetup = state.camera.getSetup();
             state.cameraPath = {
                 from: { ...state.camera.getSetup() },
                 to: target,
