@@ -399,7 +399,7 @@ export class RaymondCanvas extends Canvas {
         this.selectionLayer.draw(this.ctx);
 
         // Work out the segments to actually draw
-        const { segments, vision } = computeSegments(state.eye, shapes, lights);
+        const { segments, vision } = computeSegments(state.eye, shapes, lights)
 
         ctx.lineWidth = 2;
         for (const { start, end, color, attenuation } of segments) {
@@ -410,6 +410,8 @@ export class RaymondCanvas extends Canvas {
         // Draw what the eye sees!
         if (state.vision) {
             const pad = 40;
+            ctx.strokeStyle = "white";
+            ctx.strokeRect(pad, this.height - 110, this.width - 2 * pad, 100);
             if (state.eye) {
                 const xStep = (this.width - 2 * pad) / state.eye.numRays;
                 for (let i = 0; i < state.eye.numRays; i++) {
@@ -420,7 +422,7 @@ export class RaymondCanvas extends Canvas {
                     ctx.fillRect(
                         pad + i * xStep,
                         this.height - 110,
-                        xStep + 1,
+                        xStep + (i === state.eye.numRays - 1 ? 0 : 1),
                         100
                     );
                 }
