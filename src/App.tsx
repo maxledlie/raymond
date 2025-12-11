@@ -11,6 +11,8 @@ import { RaymondCanvas } from "./canvas/raymondCanvas";
 import { newPoint, newVector } from "./math";
 import { Shape } from "./shapes";
 import ObjectPanel from "./components/ObjectPanel";
+import { PointLight } from "./canvas/PointLight";
+import LightPanel from "./components/LightPanel";
 
 function defaultTransform(): UITransform {
     return {
@@ -39,6 +41,7 @@ function App() {
         useState<CameraSetup>(defaultCameraSetup);
 
     const [selectedObject, setSelectedObject] = useState<Shape | null>(null);
+    const [selectedLight, setSelectedLight] = useState<PointLight | null>(null);
 
     // Initialise the canvas once the DOM element is ready.
     // The canvas will independently draw its current state every frame, and update its current
@@ -69,6 +72,7 @@ function App() {
             setCameraTransform(state.cameraTransform);
             setCameraSetup(state.cameraSetup);
             setSelectedObject(state.selectedShape);
+            setSelectedLight(state.selectedLight);
             window.setTimeout(loop, 1000 / 24);
         };
         loop();
@@ -103,31 +107,52 @@ function App() {
                     pointerEvents: "none",
                 }}
             >
-                <div
-                    className="ui-panel"
-                    style={{
-                        top: 0,
-                        right: 0,
-                        height: "50vh",
-                    }}
-                >
-                    {selectedObject && (
+                {selectedObject && (
+                    <div
+                        className="ui-panel"
+                        style={{
+                            top: 0,
+                            right: 0,
+                            height: "50vh",
+                        }}
+                    >
                         <ObjectPanel
                             transform={serializeTransform(
                                 selectedObject.transform
                             )}
                             setTransform={(t) => {
-                                canvas?.setSelectedShapeTransform(
+                                canvas?.setSelectedTransform(
                                     deserializeTransform(t)
                                 );
                             }}
                             material={selectedObject.material}
-                            setMaterial={(m) =>
-                                canvas?.setSelectedShapeMaterial(m)
-                            }
+                            setMaterial={(m) => canvas?.setSelectedMaterial(m)}
                         />
-                    )}
-                </div>
+                    </div>
+                )}
+                {selectedLight && (
+                    <div
+                        className="ui-panel"
+                        style={{
+                            top: 0,
+                            right: 0,
+                            height: "50vh",
+                        }}
+                    >
+                        <LightPanel
+                            transform={serializeTransform(
+                                selectedLight.transform
+                            )}
+                            setTransform={(t) =>
+                                canvas?.setSelectedTransform(
+                                    deserializeTransform(t)
+                                )
+                            }
+                            color={selectedLight.color}
+                            setColor={(c) => canvas?.setSelectedColor(c)}
+                        />
+                    </div>
+                )}
 
                 <div
                     className="ui-panel"
@@ -174,6 +199,7 @@ interface CanvasState {
     cameraSetup: CameraSetup;
     cameraTransform: UITransform;
     selectedShape: Shape | null;
+    selectedLight: PointLight | null;
 }
 
 function getCanvasState(canvas: RaymondCanvas): CanvasState {
@@ -181,15 +207,13 @@ function getCanvasState(canvas: RaymondCanvas): CanvasState {
         state: { camera },
     } = canvas;
 
-    const selectedShape =
-        canvas.selectionLayer.objects[
-            canvas.selectionLayer.selectedObjectIndex ?? -1
-        ] ?? null;
+    const selected = canvas.selectionLayer.getSelectedObject();
 
     return {
         cameraSetup: camera.getSetup(),
         cameraTransform: serializeTransform(camera.transform),
-        selectedShape: (selectedShape instanceof Shape) ? selectedShape : null,
+        selectedShape: selected instanceof Shape ? selected : null,
+        selectedLight: selected instanceof PointLight ? selected : null,
     };
 }
 

@@ -11,7 +11,7 @@ import {
     mat3_identity,
 } from "../math.js";
 import { Shape, Quad, Circle } from "../shapes.js";
-import { color_add, color_html, color_mul } from "../shared/color.js";
+import { color_add, color_html, color_mul, type Color } from "../shared/color.js";
 import { defaultMaterial, type Material } from "../shared/material.js";
 import {
     type Transform,
@@ -737,17 +737,24 @@ export class RaymondCanvas extends Canvas {
         this.state.camera.transform = transform;
     }
 
-    setSelectedShapeTransform(transform: Transform) {
+    setSelectedTransform(transform: Transform) {
         const shape = this.selectionLayer.getSelectedObject();
         if (shape) {
             shape.transform = transform;
         }
     }
 
-    setSelectedShapeMaterial(material: Material) {
+    setSelectedMaterial(material: Material) {
         const selected = this.selectionLayer.getSelectedObject();
         if (selected instanceof Shape) {
             selected.material = material;
+        }
+    }
+
+    setSelectedColor(color: Color) {
+        const selected = this.selectionLayer.getSelectedObject();
+        if (selected instanceof PointLight) {
+            selected.color = color;
         }
     }
 }
