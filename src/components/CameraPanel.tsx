@@ -1,6 +1,7 @@
 import "./CameraPanel.css";
 import "../App.css";
-import type { Transform, CameraSetup, Vec2 } from "../uiTypes";
+import type { Transform, CameraSetup } from "../uiTypes";
+import { FloatDisplay, VectorDisplay } from "./Inputs";
 
 export interface CameraPanelProps {
     setup: CameraSetup;
@@ -54,83 +55,5 @@ export default function CameraPanel({
                 setVector={(v) => setTransform({ ...transform, scale: v })}
             />
         </div>
-    );
-}
-
-interface FloatDisplayProps {
-    name: string;
-    value: number;
-    setValue: (v: number) => void;
-    step?: number;
-}
-function FloatDisplay({ name, value, setValue, step }: FloatDisplayProps) {
-    return (
-        <div style={{ margin: "6px" }}>
-            <div className="form-field">
-                <label>
-                    {name}
-                    <input
-                        type="number"
-                        name={`${name} x`}
-                        value={truncateFloat(value, 2)}
-                        step={step ?? 0.01}
-                        onChange={(e) => setValue(parseFloat(e.target.value))}
-                    ></input>
-                </label>
-            </div>
-        </div>
-    );
-}
-
-interface VectorDisplayProps {
-    name: string;
-    vector: Vec2;
-    setVector: (v: Vec2) => void;
-}
-function VectorDisplay({ name, vector, setVector }: VectorDisplayProps) {
-    return (
-        <div style={{ margin: "6px" }}>
-            <div className="form-field">
-                <label>
-                    {name} X{" "}
-                    <input
-                        type="number"
-                        name={`${name} x`}
-                        value={truncateFloat(vector.x, 2)}
-                        step={1}
-                        onChange={(e) =>
-                            setVector({
-                                x: parseFloat(e.target.value),
-                                y: vector.y,
-                            })
-                        }
-                    ></input>
-                </label>
-            </div>
-            <div className="form-field">
-                <label>
-                    Y{" "}
-                    <input
-                        type="number"
-                        name={`${name} y`}
-                        value={truncateFloat(vector.y, 2)}
-                        step={1}
-                        onChange={(e) =>
-                            setVector({
-                                x: vector.x,
-                                y: parseFloat(e.target.value),
-                            })
-                        }
-                    ></input>
-                </label>
-            </div>
-        </div>
-    );
-}
-
-function truncateFloat(n: number, numDecimalPlaces: number): number {
-    return (
-        Math.round(n * Math.pow(10, numDecimalPlaces)) /
-        Math.pow(10, numDecimalPlaces)
     );
 }

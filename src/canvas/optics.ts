@@ -254,7 +254,7 @@ function lighting(
         specular = BLACK;
     } else {
         diffuse = color_mul(effectiveColor, material.diffuse * lightDotNormal);
-        const reflectv = reflect(vec_mul(lightv, -1), data.eyev);
+        const reflectv = reflect(vec_mul(lightv, -1), data.normalv);
         const reflectDotEye = vec_dot(reflectv, data.eyev);
 
         if (reflectDotEye <= 0) {

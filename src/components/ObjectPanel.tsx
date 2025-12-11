@@ -60,11 +60,43 @@ export default function ObjectPanel({
                 name="Refractive Index"
                 min={0.1}
                 max={2.5}
-                step={0.1}
+                step={0.05}
                 value={material.refractiveIndex}
                 setValue={(v) =>
                     setMaterial({ ...material, refractiveIndex: v })
                 }
+            />
+            <FloatDisplay
+                name="Ambient"
+                min={0}
+                max={1}
+                step={0.05}
+                value={material.ambient}
+                setValue={(v) => setMaterial({ ...material, ambient: v })}
+            />
+            <FloatDisplay
+                name="Diffuse"
+                min={0}
+                max={1}
+                step={0.05}
+                value={material.diffuse}
+                setValue={(v) => setMaterial({ ...material, diffuse: v })}
+            />
+            <FloatDisplay
+                name="Specular"
+                min={0}
+                max={1}
+                step={0.05}
+                value={material.specular}
+                setValue={(v) => setMaterial({ ...material, specular: v })}
+            />
+            <FloatDisplay
+                name="Shininess"
+                min={0}
+                max={400}
+                step={10}
+                value={material.shininess}
+                setValue={(v) => setMaterial({ ...material, shininess: v })}
             />
         </div>
     );
